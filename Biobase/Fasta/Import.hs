@@ -5,11 +5,17 @@
 
 module Biobase.Fasta.Import where
 
+import Data.ByteString.Char8 as BS
+import Data.Iteratee.Iteratee as I
+
+import Biobase.Fasta
+
 
 
 -- | Transforms a 'ByteString' into 'Fasta' files.
 
-eneeFASTA :: (Monad m) => Enumeratee ByteString [Fasta] m a
+eneeFasta :: (Monad m) => Enumeratee ByteString [Fasta] m a
+eneeFasta = undefined
 
 
 

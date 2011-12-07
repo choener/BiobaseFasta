@@ -26,6 +26,7 @@ extra-source-files:
 library
   build-depends:
     base >3 && <5,
+    bytestring,
     iteratee,
     iteratee-compress,
     transformers
