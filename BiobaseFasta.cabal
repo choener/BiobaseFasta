@@ -1,4 +1,4 @@
-name:           BiobaseFASTA
+name:           BiobaseFasta
 version:        0.0.0.1
 author:         Christian Hoener zu Siederdissen
 maintainer:     choener@tbi.univie.ac.at
@@ -16,6 +16,10 @@ description:
                 typical application, the user should write an enumeratee to
                 extract information to allow for efficient low-memory handling
                 of queries.
+                .
+                Facilities for fast, efficient linear scans are provided. These
+                functions are not yet stable and could move to another library,
+                if more data sources require efficient scans.
 
 extra-source-files:
 
@@ -27,8 +31,8 @@ library
     transformers
 
   exposed-modules:
-    Biobase.FASTA
-    Biobase.FASTA.Import
+    Biobase.Fasta
+    Biobase.Fasta.Import
 
   ghc-options:
     -O2 -funbox-strict-fields
