@@ -7,6 +7,7 @@ module Biobase.Fasta.Import where
 
 import Data.ByteString.Char8 as BS
 import Data.Iteratee.Iteratee as I
+import Data.Iteratee.Char as I
 
 import Biobase.Fasta
 
@@ -15,7 +16,8 @@ import Biobase.Fasta
 -- | Transforms a 'ByteString' into 'Fasta' files.
 
 eneeFasta :: (Monad m) => Enumeratee ByteString [Fasta] m a
-eneeFasta = undefined
+eneeFasta = enumLinesBS ><> unfoldConvStream go undefined where
+  go _ = undefined
 
 
 
