@@ -44,6 +44,8 @@ type FastaData = ByteString
 type FastaFunction z = FastaHeader -> FastaData -> StartPos -> z
 
 -- | 
+--
+-- TODO is <- is strict, make lazy and map the hdr info onto each result
 
 eneeFasta
   :: (Monad m, Functor m, Nullable z, NullPoint z, Monoid z)
