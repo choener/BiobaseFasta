@@ -20,32 +20,54 @@ import Biobase.Fasta
 
 
 
--- | Takes a bytestring sequence, applies 'f' to each bytestring of windowsize and returns the results z.
+-- | This is the type of the conversion function from FASTA data to the data
+-- 'z'. Make certain that all input is used strictly! BangPatterns are the
+-- easiest to do. In order, the function expects the current FASTA header, then
+-- a data segment, and finally the starting position of the data segment within
+-- the full FASTA data.
+--
+-- If you need the conversion to run in constant time, do not use the
+-- convenience functions and replace the final conversion to a strict stream by
+-- your own conversion (or output) function.
 
-seqIter
+type FastaFunction z = FastaHeader -> FastaData -> StartPos -> z
+
+-- | Starting position in FASTA entry.
+
+type StartPos = Int
+
+-- | Current header (the line starting with '>')
+
+type FastaHeader = ByteString
+
+-- | FASTA data
+
+type FastaData = ByteString
+
+
+
+-- * conversion from FASTA to data of type 'z'.
+
+-- | Takes a bytestring sequence, applies 'f' to each bytestring of windowsize
+-- and returns the results z.
+
+rollingIter
   :: (Monad m, Functor m, Nullable z, Monoid z)
   => (ByteString -> StartPos -> z)
   -> Int
   -> Int
   -> Enumeratee ByteString z m a
-seqIter f windowSize peekSize = unfoldConvStream go 0 where
+rollingIter f windowSize peekSize = unfoldConvStream go 0 where
   go start = do
     yss <- roll windowSize (windowSize+peekSize)
     case yss of
       [ys] -> do let xs = BS.filter (/='\n') ys
                  let l = BS.length xs
                  return $ (start + l, f xs start)
-      _ -> error "eh?"
+      _ -> error "rollingIter: error"
 
-type StartPos = Int
-type FastaHeader = ByteString
-type FastaData = ByteString
-
-type FastaFunction z = FastaHeader -> FastaData -> StartPos -> z
-
--- | 
---
--- TODO is <- is strict, make lazy and map the hdr info onto each result
+-- | Outer enumeratee. See the two convenience functions for how to use it
+-- (just like any enumeratee, basically).
 
 eneeFasta
   :: (Monad m, Functor m, Nullable z, NullPoint z, Monoid z)
@@ -56,12 +78,17 @@ eneeFasta
 eneeFasta f windowSize peekSize = unfoldConvStream go "" where
   go hdr = do
     hdr <- I.takeWhile (/=10) -- 10 == '\n'
-    is <- joinI $ I.breakE (==62) ><> seqIter (f hdr) windowSize peekSize $ stream2stream -- 62 == '>'
+    is <- joinI
+            $   I.takeUpTo 8192
+            ><> I.breakE (==62)
+            ><> rollingIter (f hdr) windowSize peekSize
+            $   stream2stream -- 62 == '>'
     return (hdr, is)
+{-# INLINE eneeFasta #-}
 
 
 
--- * convenience
+-- * Convenience functions: final data is returned strictly.
 
 -- | From an uncompressed file.
 
