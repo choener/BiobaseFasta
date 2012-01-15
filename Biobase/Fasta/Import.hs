@@ -30,7 +30,13 @@ import Biobase.Fasta
 -- convenience functions and replace the final conversion to a strict stream by
 -- your own conversion (or output) function.
 
-type FastaFunction z = FastaHeader -> FastaData -> StartPos -> z
+type FastaFunction z
+  = FastaHeader     -- ^ the ">" header
+  -> StartPos       -- ^ where in the original sequence to start
+  -> WindowSize     -- ^ how many characters we are looking at
+  -> PeekSize       -- ^ this many characters are from the next window (peeking into)
+  -> FastaData      -- ^ the actual sequence data
+  -> z              -- ^ and what we return as result
 
 -- | Starting position in FASTA entry.
 
@@ -44,6 +50,13 @@ type FastaHeader = ByteString
 
 type FastaData = ByteString
 
+-- | Window
+
+type WindowSize = Int
+
+-- | How many characters to peek forward
+
+type PeekSize = Int
 
 
 -- * conversion from FASTA to data of type 'z'.
@@ -53,9 +66,9 @@ type FastaData = ByteString
 
 rollingIter
   :: (Monad m, Functor m, Nullable z, Monoid z)
-  => (ByteString -> StartPos -> z)
-  -> Int
-  -> Int
+  => (StartPos -> WindowSize -> PeekSize -> FastaData -> z)
+  -> WindowSize
+  -> PeekSize
   -> Enumeratee ByteString z m a
 rollingIter f windowSize peekSize = unfoldConvStream go 0 where
   go start = do
@@ -63,26 +76,36 @@ rollingIter f windowSize peekSize = unfoldConvStream go 0 where
     case yss of
       [ys] -> do let xs = BS.filter (/='\n') ys
                  let l = BS.length xs
-                 return $ (start + l, f xs start)
+                 return $ (start + l, f start windowSize peekSize xs)
       _ -> error "rollingIter: error"
+{-# INLINE rollingIter #-}
 
 -- | Outer enumeratee. See the two convenience functions for how to use it
 -- (just like any enumeratee, basically).
+--
+-- The fasta function 'f' manipulates small stretches of fasta data and has
+-- arguments: fasta header, fasta data, start position (all filled by
+-- eneeFasta).
+--
+-- Next we have the window size, how many characters to read at once,
+--
+-- followed by the the number of characters to read in addition.
+--
+-- The work is actually done by 'rollingIter'.
 
 eneeFasta
   :: (Monad m, Functor m, Nullable z, NullPoint z, Monoid z)
-  => (ByteString -> ByteString -> StartPos -> z)
-  -> Int
-  -> Int
+  => FastaFunction z
+  -> WindowSize
+  -> PeekSize
   -> Enumeratee ByteString z m a
 eneeFasta f windowSize peekSize = unfoldConvStream go "" where
   go hdr = do
     hdr <- I.takeWhile (/=10) -- 10 == '\n'
     is <- joinI
-            $   I.takeUpTo 8192
-            ><> I.breakE (==62)
+            $   I.breakE (==62) -- 62 == '>'
             ><> rollingIter (f hdr) windowSize peekSize
-            $   stream2stream -- 62 == '>'
+            $   stream2stream
     return (hdr, is)
 {-# INLINE eneeFasta #-}
 
@@ -99,6 +122,7 @@ fromFile ff windowSize peekSize fp
             . eneeFasta ff windowSize peekSize
             $ stream2stream
             )
+{-# INLINE fromFile #-}
 
 -- | From a gzip-compressed file.
 
@@ -111,3 +135,4 @@ fromFileZip ff windowSize peekSize fp
             . eneeFasta ff windowSize peekSize
             $ stream2stream
             )
+{-# INLINE fromFileZip #-}
