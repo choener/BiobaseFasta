@@ -72,7 +72,7 @@ rollingIter
   -> Enumeratee ByteString z m a
 rollingIter f windowSize peekSize = unfoldConvStream go 0 where
   go start = do
-    yss <- roll windowSize (windowSize+peekSize)
+    yss <- roll (windowSize+peekSize) windowSize
     case yss of
       [ys] -> do let xs = BS.filter (/='\n') ys
                  let l = BS.length xs
