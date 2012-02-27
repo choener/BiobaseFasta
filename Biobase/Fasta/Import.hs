@@ -35,6 +35,7 @@ type FastaFunction z
   -> StartPos       -- ^ where in the original sequence to start
   -> WindowSize     -- ^ how many characters we are looking at
   -> PeekSize       -- ^ this many characters are from the next window (peeking into)
+  -> TrailSequence  -- ^ trailing last window-size characters
   -> FastaData      -- ^ the actual sequence data
   -> z              -- ^ and what we return as result
 
@@ -58,6 +59,11 @@ type WindowSize = Int
 
 type PeekSize = Int
 
+-- | Last window-size characters as a bytestring
+
+type TrailSequence = ByteString
+
+
 
 -- * conversion from FASTA to data of type 'z'.
 
@@ -66,17 +72,20 @@ type PeekSize = Int
 
 rollingIter
   :: (Monad m, Functor m, Nullable z, Monoid z)
-  => (StartPos -> WindowSize -> PeekSize -> FastaData -> z)
+  => (StartPos -> WindowSize -> PeekSize -> TrailSequence -> FastaData -> z)
   -> WindowSize
   -> PeekSize
   -> Enumeratee ByteString z m a
-rollingIter f windowSize peekSize = unfoldConvStream go 0 where
-  go start = do
+rollingIter f windowSize peekSize = unfoldConvStream go (0,"") where
+  go (start,trail) = do
     yss <- roll (windowSize+peekSize) windowSize
     case yss of
       [ys] -> do let xs = BS.filter (/='\n') ys
                  let l = BS.length xs
-                 return $ (start + l, f start windowSize peekSize xs)
+                 let trail = BS.drop (max 0 $ l-windowSize) xs
+                 return $ ( ( start + l , trail )
+                          , f start windowSize peekSize trail xs
+                          )
       _ -> error "rollingIter: error"
 {-# INLINE rollingIter #-}
 
