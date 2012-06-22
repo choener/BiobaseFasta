@@ -68,7 +68,8 @@ type TrailSequence = ByteString
 -- * conversion from FASTA to data of type 'z'.
 
 -- | Takes a bytestring sequence, applies 'f' to each bytestring of windowsize
--- and returns the results z.
+-- and returns the results z. The "trail" is a suffix of 'PeekSize' from the
+-- previous window.
 
 rollingIter
   :: (Monad m, Functor m, Nullable z, Monoid z)
@@ -78,13 +79,13 @@ rollingIter
   -> Enumeratee ByteString z m a
 rollingIter f windowSize peekSize = unfoldConvStream go (0,"") where
   go (start,trail) = do
-    yss <- roll (windowSize+peekSize) windowSize
+    yss <- roll (windowSize+peekSize) windowSize -- take w+p characters, but drop only w characters from stream
     case yss of
-      [ys] -> do let xs = BS.filter (/='\n') ys
-                 let l = BS.length xs
-                 let trail = BS.drop (max 0 $ l-windowSize) xs
-                 return $ ( ( start + l , trail )
-                          , f start windowSize peekSize trail xs
+      [ys] -> do let l = BS.length ys -- this is the number of real nucleotides
+                 -- keep p characters from window, note that ys == window++peek, hence this construction
+                 let newTrail = BS.take peekSize . BS.drop (windowSize-peekSize) $ ys
+                 return $ ( ( start + l , newTrail )
+                          , f start windowSize peekSize trail ys
                           )
       _ -> error "rollingIter: error"
 {-# INLINE rollingIter #-}
@@ -113,6 +114,7 @@ eneeFasta f windowSize peekSize = unfoldConvStream go "" where
     hdr <- I.takeWhile (/=10) -- 10 == '\n'
     is <- joinI
             $   I.breakE (==62) -- 62 == '>'
+            ><> I.filter (/=10) -- filter all line breaks for this sequence block
             ><> rollingIter (f hdr) windowSize peekSize
             $   stream2stream
     return (hdr, is)
