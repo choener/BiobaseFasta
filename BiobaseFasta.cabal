@@ -1,5 +1,5 @@
 name:           BiobaseFasta
-version:        0.0.0.5
+version:        0.0.1.0
 author:         Christian Hoener zu Siederdissen
 maintainer:     choener@tbi.univie.ac.at
 homepage:       http://www.tbi.univie.ac.at/~choener/
@@ -34,11 +34,11 @@ flag tests
 
 library
   build-depends:
-    base >3 && <5,
-    bytestring,
-    iteratee,
-    iteratee-compress,
-    transformers
+    base >3 && <5 ,
+    bytestring            ,
+    conduit     == 0.5.*  ,
+    transformers          ,
+    vector      == 0.9.*
 
   exposed-modules:
     Biobase.Fasta

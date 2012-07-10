@@ -1,6 +1,14 @@
 # BiobaseFASTA
 
-A Haskell library for FASTA-file handling.
+## A Haskell library for FASTA-file handling.
+
+This re-written version (0.0.1.0) is based on the conduit library and includes
+some preliminary abstraction mechanism over zero- and one-based indices.
+
+
+
+
+## Old 0.0.0.x text:
 
 Enumeratees for FASTA-handling and convenience functions. In a
 typical application, the user should write an enumeratee to
