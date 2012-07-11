@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -17,13 +18,15 @@ import Data.Conduit.Util as CU
 import Data.Conduit.Binary as CB
 import Data.Conduit.Lazy as CL
 import Control.Monad
+import Prelude as P
+import Data.Sequence as S
+import Data.Foldable
 {-
 import Data.Iteratee.Iteratee as I
 import Data.Iteratee.ListLike as I
 import Data.Iteratee.Char as I
 import Data.Iteratee.IO as I
 import Data.Iteratee.ZLib
-import Prelude as P
 import Data.Monoid
 import Data.List as L
 -}
@@ -71,58 +74,47 @@ type TrailSequence = ByteString
 
 -- * Conduit-based streaming FASTA parser.
 
-streamFasta :: (Monad m, MonadIO m) => Conduit ByteString m ByteString
-streamFasta = CB.lines =$= CU.conduitState (Nothing,"") push close where
-  mkfh = join . fmap mkFastaHeader
-  newPast past x = BS.drop (l - 250) all where
-    all = past `BS.append` x
-    l   = BS.length all
-  push (Nothing,_) x = do
-    case x of
-      (mkFastaHeader -> Just fh) -> return $ StateProducing (Just fh,"") []
-  push (Just fh,past) x = do
-    case x of
-      (mkFastaHeader -> Just fh) -> return $ StateProducing (Just fh,"") []
-      "" -> return $ StateProducing (Just fh,past) []
-      x  -> return $ StateProducing (Just fh,"") [unFastaHeader fh `BS.append` "  " `BS.append` x]
-  close state = return []
-
-streamFasta' :: (Monad m, MonadIO m) => Conduit ByteString m ByteString
-streamFasta' = do
-  CB.dropWhile (/=62)
-  CB.takeWhile (/=10)
-  CB.takeWhile (/=62) =$= modifyByteString (BS.filter (/='\n')) =$= blub
-
-blub :: (Monad m, MonadIO m) => Conduit ByteString m ByteString
-blub = loop id where
-  loop front = awaitE >>= either (finish front) (go front)
-  finish front r = let final = BS.empty
-                   in unless (BS.null final) (yield final) >> return r
-  go sofar more = case 
-
-
-roll :: Monad m => GLSink ByteString m ByteString
-roll = go 20000 id where
-  go n front = await >>= maybe (return "nothing") go' where
-    go' bs = if BS.length bs < n
-               then go (n - BS.length bs) (front . (bs:))
-               else let tk = BS.take 20000 . BS.concat $ front [bs]
-                        lo = BS.drop  10000 . BS.concat $ front [bs]
-                    in  leftover lo >> return tk
-                    -- in  leftover lo >> return (BS.pack $ show $ BS.length tk)
+sf3 :: (Monad m, MonadIO m) => Int -> Int -> Conduit ByteString m (FastaHeader, FastaIndex, ByteString)
+sf3 wsize ssize
+  | ssize > wsize = error $ "step size > window size, would loose data!"
+  | otherwise = CB.lines =$= conduitState Nix push close
+  where
+    push Nix l
+      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty S.empty) []
+      | otherwise             = return $ StateProducing Nix []
+    push (HaveHeader hdr idx cs xs) l
+      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty S.empty) [(hdr, idx, BS.concat $ toList xs) | S.length xs > 0]
+      | ";" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader hdr idx (cs |> l) S.empty) [(hdr, idx, BS.concat $ toList xs) | S.length xs > 0]
+      | len <  wsize = do
+          return $ StateProducing (HaveHeader hdr idx cs (xs |> l)) []
+      | len >= wsize = do
+          return $ StateProducing (HaveHeader hdr newidx cs (S.singleton $ BS.drop drp $ xsl)) (P.zipWith (\i x -> (hdr,idx .+ i, x)) [0, int64 ssize ..] $ rs)
+      where
+        xsl = BS.concat $ toList $ xs |> l
+        len = P.sum $ P.map BS.length $ toList $ xs |> l
+        drp = P.length rs * ssize
+        newidx = idx .+ int64 drp
+        int64 = fromIntegral . toInteger
+        rs = returns xsl
+    close Nix = return []
+    close (HaveHeader hdr idx cs xs) = return [(hdr, idx, BS.concat $ toList xs)]
+    returns xs
+      | BS.length xs >= wsize = BS.take wsize xs : returns (BS.drop ssize xs)
+      | otherwise = []
 
 
-modifyByteString f = loop where
-  loop = await >>= maybe (return ()) go
-  go bs
-    | BS.null bs = loop
-    | otherwise  = yield (f bs) >> loop
+
+data SF3
+  = Nix
+  | HaveHeader FastaHeader FastaIndex (S.Seq ByteString) (S.Seq ByteString)
+
+
 
 
 
 test :: IO ()
 test = do
-  runResourceT $ sourceFile "test.fa" $= streamFasta' $$ CL.foldM (\_ x -> liftIO $ print x) ()
+  runResourceT $ sourceFile "test.fa" $= sf3 10000 9000 $$ CL.foldM (\_ x -> liftIO $ print x) ()
 
 
 

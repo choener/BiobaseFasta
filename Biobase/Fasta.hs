@@ -20,10 +20,10 @@ data Fasta = Fasta
 newtype FastaHeader = FastaHeader {unFastaHeader :: ByteString}
   deriving (Show)
 
-mkFastaHeader :: ByteString -> Maybe FastaHeader
+mkFastaHeader :: ByteString -> FastaHeader
 mkFastaHeader xs
-  | ">" `isPrefixOf` xs = Just . FastaHeader . BS.copy . BS.drop 1 $ xs
-  | otherwise = Nothing
+  | ">" `isPrefixOf` xs = FastaHeader . BS.copy . BS.drop 1 $ xs
+  | otherwise = error $ "not a fasta header: " ++ BS.unpack xs
 
 
 -- * Zero- or One-based indexing into sequences.
