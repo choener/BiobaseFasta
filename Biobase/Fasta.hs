@@ -107,12 +107,14 @@ instance IndexOps Zero where
 type FastaIndex = Index One
 
 -- | Returns a FASTA entry. We have a header, the first index, and the data or
--- payload.
+-- payload. In addition, we have "past data", which is the data from the
+-- previous window.
 
 data Fasta = Fasta
   { _fastaHeader  :: FastaHeader
   , _firstIndex   :: FastaIndex
   , _fastaData    :: ByteString
+  , _thePastData  :: ByteString
   }
   deriving (Eq,Show)
 

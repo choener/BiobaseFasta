@@ -2,6 +2,9 @@
 
 -- Conduit-based FASTA file format reading. Designed to be used in streaming
 -- applications.
+--
+-- Note that each 'Fasta' entries data is composed of bytestrings that do not
+-- necessarily have a starting internal offset of 0.
 
 module Biobase.Fasta.Import where
 
@@ -31,15 +34,17 @@ streamFasta (WindowSize wsize) (StepSize ssize)
   | otherwise = CB.lines =$= conduitState Nix push close
   where
     push Nix l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty S.empty) []
+      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty) []
       | otherwise             = return $ StateProducing Nix []
-    push (HaveHeader hdr idx cs xs) l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty S.empty) [Fasta hdr idx . BS.concat $ toList xs | S.length xs > 0]
-      | ";" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader hdr idx (cs |> l) S.empty) [Fasta hdr idx . BS.concat $ toList xs | S.length xs > 0]
+    push (HaveHeader hdr idx cs past xs) l
+      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty) [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
+      | ";" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader hdr idx (cs |> l) "" S.empty) [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
       | len <  wsize = do
-          return $ StateProducing (HaveHeader hdr idx cs (xs |> l)) []
+          return $ StateProducing (HaveHeader hdr idx cs past (xs |> l)) []
       | len >= wsize = do
-          return $ StateProducing (HaveHeader hdr newidx cs (S.singleton $ BS.drop drp $ xsl)) (P.zipWith (\i x -> Fasta hdr (idx .+ i) x) [0, int64 ssize ..] $ rs)
+          return $ StateProducing
+                    (HaveHeader hdr newidx cs newpast (S.singleton $ BS.drop drp $ xsl))
+                    (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 ssize ..] rs (past : rs) )
       where
         xsl = BS.concat $ toList $ xs |> l
         len = P.sum $ P.map BS.length $ toList $ xs |> l
@@ -47,8 +52,9 @@ streamFasta (WindowSize wsize) (StepSize ssize)
         newidx = idx .+ int64 drp
         int64 = fromIntegral . toInteger
         rs = returns xsl
+        newpast = P.last rs
     close Nix = return []
-    close (HaveHeader hdr idx cs xs) = return [Fasta hdr idx . BS.concat $ toList xs]
+    close (HaveHeader hdr idx cs past xs) = return [Fasta hdr idx (BS.concat $ toList xs) past]
     returns xs
       | BS.length xs >= wsize = BS.take wsize xs : returns (BS.drop ssize xs)
       | otherwise = []
@@ -65,7 +71,12 @@ newtype StepSize = StepSize Int
 
 data SF3
   = Nix
-  | HaveHeader FastaHeader FastaIndex (S.Seq ByteString) (S.Seq ByteString)
+  | HaveHeader
+      FastaHeader
+      FastaIndex
+      (S.Seq ByteString)  -- comments
+      ByteString          -- the past
+      (S.Seq ByteString)  -- current string
 
 
 
