@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -9,16 +10,15 @@ module Biobase.Fasta where
 
 import Data.Int
 import Data.ByteString.Char8 as BS
-
-data Fasta = Fasta
-  {
-  }
+import Data.Lens.Template
 
 -- | A FastaHeader. Starts with '>'. The '>' character is not preserved by the
 -- newtype here!
 
 newtype FastaHeader = FastaHeader {unFastaHeader :: ByteString}
-  deriving (Show)
+  deriving (Eq,Ord,Read,Show)
+
+-- | Simple creation of a Fasta header.
 
 mkFastaHeader :: ByteString -> FastaHeader
 mkFastaHeader xs
@@ -105,3 +105,16 @@ instance IndexOps Zero where
 -- | Whole scaffolds are indexed starting at one.
 
 type FastaIndex = Index One
+
+-- | Returns a FASTA entry. We have a header, the first index, and the data or
+-- payload.
+
+data Fasta = Fasta
+  { _fastaHeader  :: FastaHeader
+  , _firstIndex   :: FastaIndex
+  , _fastaData    :: ByteString
+  }
+  deriving (Eq,Show)
+
+$( makeLens ''Fasta )
+

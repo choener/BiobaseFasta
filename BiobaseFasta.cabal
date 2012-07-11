@@ -35,10 +35,13 @@ flag tests
 library
   build-depends:
     base >3 && <5 ,
-    bytestring            ,
-    conduit     == 0.5.*  ,
-    transformers          ,
-    vector      == 0.9.*
+    bytestring                      ,
+    conduit             == 0.5.*    ,
+    containers                      ,
+    data-lens           == 2.10.*   ,
+    data-lens-template  == 2.1.5.*  ,
+    transformers                    ,
+    vector              == 0.9.*
 
   exposed-modules:
     Biobase.Fasta
