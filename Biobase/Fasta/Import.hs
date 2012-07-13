@@ -25,13 +25,17 @@ import Debug.Trace
 
 -- * Conduit-based streaming FASTA parser.
 
+streamFasta :: Monad m => WindowSize -> Conduit ByteString m Fasta
+streamFasta (WindowSize wsize)
+  | wsize <= 0 = error "window size too small"
+
 -- | 'streamFasta' processes fasta files using windows of 'WindowSize' and
 -- steps of 'StepSize'. We start at index 1 and go forward in steps of
 -- 'StepSize', each time returning 'WindowSize' nucleotides, or less if the
 -- entry is smaller.
 
-streamFasta :: (Monad m) => WindowSize -> StepSize -> Conduit ByteString m Fasta
-streamFasta (WindowSize wsize) (StepSize ssize)
+streamFastaWS :: (Monad m) => WindowSize -> StepSize -> Conduit ByteString m Fasta
+streamFastaWS (WindowSize wsize) (StepSize ssize)
   | ssize > wsize = error $ "step size > window size, would loose data!"
   | otherwise = CB.lines =$= conduitState Nix push close
   where
