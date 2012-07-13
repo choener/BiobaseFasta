@@ -40,6 +40,7 @@ library
     containers                      ,
     data-lens           == 2.10.*   ,
     data-lens-template  == 2.1.5.*  ,
+    mtl                 == 2.1.2.*  ,
     QuickCheck          == 2.5.*    ,
     transformers                    ,
     vector              == 0.9.*

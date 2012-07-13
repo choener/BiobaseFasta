@@ -19,6 +19,8 @@ import Prelude as P
 
 import Biobase.Fasta
 
+import Debug.Trace
+
 
 
 -- * Conduit-based streaming FASTA parser.
@@ -28,7 +30,7 @@ import Biobase.Fasta
 -- 'StepSize', each time returning 'WindowSize' nucleotides, or less if the
 -- entry is smaller.
 
-streamFasta :: (Monad m, MonadIO m) => WindowSize -> StepSize -> Conduit ByteString m Fasta
+streamFasta :: (Monad m) => WindowSize -> StepSize -> Conduit ByteString m Fasta
 streamFasta (WindowSize wsize) (StepSize ssize)
   | ssize > wsize = error $ "step size > window size, would loose data!"
   | otherwise = CB.lines =$= conduitState Nix push close
@@ -42,22 +44,33 @@ streamFasta (WindowSize wsize) (StepSize ssize)
       | len <  wsize = do
           return $ StateProducing (HaveHeader hdr idx cs past (xs |> l)) []
       | len >= wsize = do
-          return $ StateProducing
+          return {- . trace (show (">>>",len,drp)) -} $ StateProducing
                     (HaveHeader hdr newidx cs newpast (S.singleton $ BS.drop drp $ xsl))
                     (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 ssize ..] rs (past : rs) )
       where
-        xsl = BS.concat $ toList $ xs |> l
-        len = P.sum $ P.map BS.length $ toList $ xs |> l
+        -- the input has grown to window size or more
+        xsl = BS.concat . toList $ xs |> l
+        -- the length of the input, deliberately not using "xsl" as to not have to pay for BS.concat
+        len = P.sum . P.map BS.length . toList $ xs |> l
         drp = P.length rs * ssize
         newidx = idx .+ int64 drp
-        int64 = fromIntegral . toInteger
-        rs = returns xsl
+        -- how many blocks of wsize, each stepping ssize, do we have? (with 100,50, there would be one at (0,99), (49,149) for length=160
+        rs = wsizeBlocks xsl
+        -- the last full window which becomes the new past
         newpast = P.last rs
     close Nix = return []
-    close (HaveHeader hdr idx cs past xs) = return [Fasta hdr idx (BS.concat $ toList xs) past]
-    returns xs
-      | BS.length xs >= wsize = BS.take wsize xs : returns (BS.drop ssize xs)
+    close (HaveHeader hdr idx cs past xs) = {- trace ("\nXXX" ++ show (xs, sum $ P.map BS.length $ toList xs)) $ -} return $ -- [Fasta hdr idx (BS.concat $ toList xs) past]
+      (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 ssize ..] rs (past : rs)) where
+        rs = wsizeBlocksClose xsl
+        xsl = BS.concat . toList $ xs
+    wsizeBlocks xs
+      | BS.length xs >= wsize = BS.take wsize xs : wsizeBlocks (BS.drop ssize xs)
       | otherwise = []
+    wsizeBlocksClose xs
+      | BS.length xs > 0 = BS.take wsize xs : wsizeBlocksClose (BS.drop ssize xs)
+      | otherwise = []
+    -- helper transform
+    int64 = fromIntegral . toInteger
 
 -- | The window size to use.
 
