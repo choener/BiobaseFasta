@@ -25,56 +25,72 @@ import Debug.Trace
 
 -- * Conduit-based streaming FASTA parser.
 
+-- | This Fasta streaming function moves windows of size 'WindowsSize', each
+-- being directly adjacent to the next one. To be able to handle data on the
+-- boundary between two windows, the previous window is always kept.
+--
+-- It is the duty of the user to handle present and past data correctly.
+
 streamFasta :: Monad m => WindowSize -> Conduit ByteString m Fasta
 streamFasta (WindowSize wsize)
   | wsize <= 0 = error "window size too small"
-
--- | 'streamFasta' processes fasta files using windows of 'WindowSize' and
--- steps of 'StepSize'. We start at index 1 and go forward in steps of
--- 'StepSize', each time returning 'WindowSize' nucleotides, or less if the
--- entry is smaller.
-
-streamFastaWS :: (Monad m) => WindowSize -> StepSize -> Conduit ByteString m Fasta
-streamFastaWS (WindowSize wsize) (StepSize ssize)
-  | ssize > wsize = error $ "step size > window size, would loose data!"
-  | otherwise = CB.lines =$= conduitState Nix push close
+  | otherwise  = CB.lines =$= conduitState Nix push close
   where
     push Nix l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty) []
-      | otherwise             = return $ StateProducing Nix []
+      | ">" `BS.isPrefixOf` l = return $ StateProducing
+                                           (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty)
+                                           []
+      | otherwise             = return $ StateProducing
+                                           Nix
+                                           []
     push (HaveHeader hdr idx cs past xs) l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty) [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
-      | ";" `BS.isPrefixOf` l = return $ StateProducing (HaveHeader hdr idx (cs |> l) "" S.empty) [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
-      | len <  wsize = do
-          return $ StateProducing (HaveHeader hdr idx cs past (xs |> l)) []
-      | len >= wsize = do
-          return {- . trace (show (">>>",len,drp)) -} $ StateProducing
-                    (HaveHeader hdr newidx cs newpast (S.singleton $ BS.drop drp $ xsl))
-                    (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 ssize ..] rs (past : rs) )
+      | ">" `BS.isPrefixOf` l = return $ StateProducing
+                                           (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty)
+                                           [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
+      | ";" `BS.isPrefixOf` l = return $ StateProducing
+                                           (HaveHeader hdr idx (cs |> l) "" S.empty)
+                                           [Fasta hdr idx (BS.concat $ toList xs) "" | S.length xs > 0]
+      | len <  wsize = return $ StateProducing
+                                  (HaveHeader hdr idx cs past (xs |> l))
+                                  []
+      | len >= wsize = return $ StateProducing
+                                  (HaveHeader hdr newidx cs newpast (S.singleton . BS.drop drp $ xsl))
+                                  (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 wsize ..] rs (past : rs))
       where
-        -- the input has grown to window size or more
         xsl = BS.concat . toList $ xs |> l
-        -- the length of the input, deliberately not using "xsl" as to not have to pay for BS.concat
         len = P.sum . P.map BS.length . toList $ xs |> l
-        drp = P.length rs * ssize
+        drp = P.length rs * wsize
+        rs  = wsizeBlocks xsl
         newidx = idx .+ int64 drp
-        -- how many blocks of wsize, each stepping ssize, do we have? (with 100,50, there would be one at (0,99), (49,149) for length=160
-        rs = wsizeBlocks xsl
-        -- the last full window which becomes the new past
         newpast = P.last rs
     close Nix = return []
-    close (HaveHeader hdr idx cs past xs) = {- trace ("\nXXX" ++ show (xs, sum $ P.map BS.length $ toList xs)) $ -} return $ -- [Fasta hdr idx (BS.concat $ toList xs) past]
-      (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 ssize ..] rs (past : rs)) where
-        rs = wsizeBlocksClose xsl
+    close (HaveHeader hdr idx cs past xs)
+      | BS.null xsl = return []
+      | otherwise   = return $ (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p) [0, int64 wsize ..] rs (past : rs))
+      where
+        rs  = wsizeBlocksClose xsl
         xsl = BS.concat . toList $ xs
     wsizeBlocks xs
-      | BS.length xs >= wsize = BS.take wsize xs : wsizeBlocks (BS.drop ssize xs)
+      | BS.length xs >= wsize = BS.take wsize xs : wsizeBlocks (BS.drop wsize xs)
       | otherwise = []
     wsizeBlocksClose xs
-      | BS.length xs > 0 = BS.take wsize xs : wsizeBlocksClose (BS.drop ssize xs)
-      | otherwise = []
-    -- helper transform
+      | BS.length xs > wsize = error "we should not be here: >wsize is handled in push"
+      | BS.null xs = []
+      | otherwise = [xs]
     int64 = fromIntegral . toInteger
+
+-- | The current state of the streaming fasta function.
+
+data StreamFastaState
+  = Nix
+  | HaveHeader
+      FastaHeader
+      FastaIndex
+      (S.Seq ByteString)
+      ByteString
+      (S.Seq ByteString)
+
+
 
 -- | The window size to use.
 
@@ -84,18 +100,6 @@ newtype WindowSize = WindowSize Int
 
 newtype StepSize = StepSize Int
 
--- | Internal state, indicating if we have found the first fasta header yet.
-
-data SF3
-  = Nix
-  | HaveHeader
-      FastaHeader
-      FastaIndex
-      (S.Seq ByteString)  -- comments
-      ByteString          -- the past
-      (S.Seq ByteString)  -- current string
-
-
 
 
 {-
@@ -103,3 +107,4 @@ test :: IO ()
 test = do
   runResourceT $ sourceFile "big.fa" $= sf3 10000 9000 $$ CL.foldM (\_ x -> liftIO $ print x) ()
 -}
+

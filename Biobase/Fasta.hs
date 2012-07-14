@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE EmptyDataDecls #-}
 
--- | This modules is currently home to a preliminary version of indices based
+-- | This module is currently home to a preliminary version of indices based
 -- on a minimal index of 'Zero' or 'One' (and possibly others).
 
 module Biobase.Fasta where
@@ -26,6 +26,7 @@ mkFastaHeader xs
   | otherwise = error $ "not a fasta header: " ++ BS.unpack xs
 
 
+
 -- * Zero- or One-based indexing into sequences.
 
 -- | Just an 'Int64' as an 'Index' newtype. We use phantom types (predefined
@@ -34,7 +35,7 @@ mkFastaHeader xs
 newtype Index t = Index {unIndex :: Int64}
   deriving (Eq,Ord,Show)
 
--- |
+-- | Index operations. Can move the index to the left or right.
 
 class IndexOps t where
 
@@ -79,6 +80,8 @@ instance IndexOps One where
     | otherwise = error $ "move: " ++ show (i,k)
     where ik = i+k
 
+
+
 -- ** Indices with minimal index "0".
 
 -- | Phantom type for indices "[0..]"
@@ -114,7 +117,7 @@ data Fasta = Fasta
   { _fastaHeader  :: FastaHeader
   , _firstIndex   :: FastaIndex
   , _fastaData    :: ByteString
-  , _thePastData  :: ByteString
+  , _pastData     :: ByteString
   }
   deriving (Eq,Show)
 
