@@ -118,6 +118,7 @@ data Fasta = Fasta
   , _firstIndex   :: FastaIndex
   , _fastaData    :: ByteString
   , _pastData     :: ByteString
+  , _futureData   :: ByteString
   }
   deriving (Eq,Show)
 
