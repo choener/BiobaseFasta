@@ -149,6 +149,24 @@ prop_EmbeddedNumbers fqc
     ys = concat . runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize 100) $= CL.sequence getNumbers $$ consume
     zs = ys L.\\ xs
 
+-- | Test if the 1-based index is always calculated correctly.
+
+prop_CharCount :: FastaQC -> Bool
+prop_CharCount fqc
+  | xs == ys  = True
+  | otherwise = trace (show (xs,ys)) $ False
+  where
+    xs = map int64 . snd . L.mapAccumL (\acc l -> (acc+l,acc)) 1 . map length . splitEvery wsize . filter (/= '\n') . concatMap snd . blocks $ fqc
+    ys = runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize wsize) $= CL.map (unIndex . (^. firstIndex)) $$ consume
+    wsize = 100
+    splitEvery k [] = []
+    splitEvery k xs = let (h,t) = L.splitAt k xs in h : splitEvery k t
+    int64 = fromIntegral . toInteger
+
+
+
+-- ** helper functions for properties
+
 -- | Finds numbers in the fasta stream.
 
 getNumbers :: Monad m => GLSink Fasta m [Int]
