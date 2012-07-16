@@ -6,6 +6,8 @@
 {-# LANGUAGE ViewPatterns #-}
 
 -- | QuickCheck properties for conduit-based Fasta streaming functions.
+--
+-- TODO extend FastaQC to create fasta files with more than one scaffold.
 
 module Biobase.Fasta.QuickCheck where
 
