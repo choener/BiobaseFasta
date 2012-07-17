@@ -87,8 +87,10 @@ streamFasta (WindowSize wsize)
       p <- CL.peek
       case (h,p) of
         (Nothing,_)       -> return $ Nothing
-        (Just x, Just y)  -> return . Just $ (futureData ^= (y ^. fastaData)) x
         (Just x, Nothing) -> return $ Just x
+        (Just x, Just y)  -> return . Just $ if (x^.fastaHeader == y^.fastaHeader)
+                                             then (futureData ^= (y ^. fastaData)) x
+                                             else x
 
 -- | The current state of the streaming fasta function.
 
