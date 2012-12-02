@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -11,30 +12,143 @@
 
 module Biobase.Fasta.QuickCheck where
 
+
+
 import Control.Monad
-import Control.Monad.Identity
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString.Char8 (pack, ByteString)
 import Data.ByteString.Lazy.Char8 (fromChunks)
 import Data.Char (isDigit,isAlpha)
 import Data.Conduit.Binary (sourceLbs)
-import Data.Conduit (GSource, ($=), ($$), GLSink)
+import Data.Conduit (GSource, ($=), ($$), GLSink, (=$=))
 import Data.Conduit.List (consume)
-import Data.Lens.Common
+import Data.Functor.Identity
 import Data.List (sort)
-import qualified Data.List as L
-import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.Conduit.List as CL
+import qualified Data.List as L
 import Test.QuickCheck
+import Test.QuickCheck.Arbitrary (shrinkList)
 import Test.QuickCheck.All
+import Test.QuickCheck.Instances
 import Text.Printf
 
 import Biobase.Fasta
 import Biobase.Fasta.Import
 
+
 import Debug.Trace
 
 
+
+-- | Data line of FASTA data
+
+newtype DataQC = DataQC ByteString
+  deriving (Show)
+
+instance Arbitrary DataQC where
+  arbitrary = do
+    n :: Int <- choose (1,100)
+    bs <- vectorOf n $ fastaElement
+    return . DataQC . pack $ bs
+  shrink (DataQC d) = map DataQC $ shrink d
+
+-- |
+
+newtype HeaderIQC = HeaderIQC ByteString
+  deriving (Show)
+
+instance Arbitrary HeaderIQC where
+  arbitrary = do
+    n :: Int <- oneof [return 0, choose (1,30)]
+    bs <- vectorOf n $ alphaNum
+    return . HeaderIQC . pack $ bs
+  shrink (HeaderIQC i) = map HeaderIQC $ shrink i
+
+-- |
+
+newtype HeaderDQC = HeaderDQC ByteString
+  deriving (Show)
+
+instance Arbitrary HeaderDQC where
+  arbitrary = do
+    n :: Int <- oneof [return 0, choose (1,100)]
+    bs <- vectorOf n $ alphaNumW
+    return . HeaderDQC . pack $ bs
+  shrink (HeaderDQC d) = map HeaderDQC $ shrink d
+
+-- |
+
+data HeaderQC = HeaderQC HeaderIQC HeaderDQC
+  deriving (Show)
+
+instance Arbitrary HeaderQC where
+  arbitrary = liftM2 HeaderQC arbitrary arbitrary
+  shrink (HeaderQC i d) = liftM2 HeaderQC (shrink i) (shrink d)
+
+-- |
+
+data FastaQC = FastaQC HeaderQC [DataQC]
+  deriving (Show)
+
+instance Arbitrary FastaQC where
+  arbitrary = do
+    n <- choose (1,100)
+    liftM2 FastaQC arbitrary (vectorOf n arbitrary)
+  shrink (FastaQC h xs) = liftM2 FastaQC (shrink h) (shrink xs)
+
+newtype MultiFastaQC = MultiFastaQC [FastaQC]
+  deriving (Show)
+
+instance Arbitrary MultiFastaQC where
+  arbitrary = do
+    n <- choose (1,10)
+    liftM MultiFastaQC $ vectorOf n arbitrary
+  shrink (MultiFastaQC xs) = map MultiFastaQC $ shrinkList shrink xs
+
+fastaElement = elements $ ['a' .. 'z'] ++ ['A' .. 'Z']
+
+alphaNum = elements $ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['1' .. '9']
+
+alphaNumW = elements $ ['a' .. 'z'] ++ ['A' .. 'Z'] ++ ['1' .. '9'] ++ [' ']
+
+-- |
+
+class ToBS x where
+  toBS :: x -> [ByteString]
+
+instance ToBS MultiFastaQC where
+  toBS (MultiFastaQC xs) = concat . L.intersperse ["\n"] $ map toBS xs
+
+instance ToBS FastaQC where
+  toBS (FastaQC h d) = L.intersperse "\n" $ toBS h ++ concatMap toBS d
+
+instance ToBS HeaderQC where
+  toBS (HeaderQC (HeaderIQC i) (HeaderDQC d)) = [ BC.concat $ [">", i] ++ if BC.null d then [] else [" ", d] ]
+
+instance ToBS DataQC where
+  toBS (DataQC d) = [d]
+
+-- |
+
+newtype OneBS = OneBS ByteString
+  deriving (Show)
+
+instance Arbitrary OneBS where
+  arbitrary = do
+    x :: MultiFastaQC <- arbitrary
+    return . OneBS . BC.concat . toBS $ x
+
+data WR = WR Int Int
+  deriving (Show)
+
+instance Arbitrary WR where
+  arbitrary = liftM2 WR (choose (10,100)) (choose (10,100))
+  shrink (WR w r) = liftM2 WR [w-1 | w>10] [r-1 | r>10]
+
+
+
+-- * Properties
 
 options = stdArgs {maxSuccess = 1000}
 
@@ -44,155 +158,34 @@ allProps = $forAllProperties customCheck
 
 
 
--- | Fasta QuickCheck generator. We do not build fasta files directly but
--- rather this generator. This makes it a lot simpler to shrink, if necessary.
+-- ** try to parse / parse - render - parse with different chunk sizes, number
+-- of columns.
 
-data FastaQC = FastaQC
-  { blocks :: [(Int,String)]
-  }
-  deriving (Eq,Show,Read)
-
-instance Arbitrary FastaQC where
-  arbitrary = do
-    n :: Int <- choose (1,100)
-    bs <- forM [1..n] someFasta
-    return $ FastaQC
-      { blocks = zip [1..] bs
-      }
-
-  -- First, sthrink by removing a block, if that succeeds shrink by removing
-  -- characters from each block in turn.
-
-  shrink (FastaQC bs)
-    | length bs >  1 = remBlock ++ remChars
-    | length bs == 1 = remChars
-    | null bs        = []
-    where
-      remBlock = [FastaQC (removeNth bs n) | n <- [0 .. length bs -1]]
-      remChars = [FastaQC (removingKchars bs k)
-                 | let s = sum . map (length . snd) $ bs
-                 , let divs = reverse . takeWhile (>0) . iterate (`div` 2) $ s
-                 , k <- divs ++ ([1 .. s] L.\\ divs)
-                 ]
-
--- | removes k characters from the input, unless they are digits. Blocks are
--- removed if only digits remain in a block.
-
-removingKchars [] _ = []
-removingKchars ((idx,b):bs) k
-  | l < k = (idx,rem k b) : bs
-  | all isDigit b' = removingKchars bs (k-l)
-  | otherwise = (idx,rem k b) : removingKchars bs (k - l)
+prop_P_PRP_1 (fqc :: MultiFastaQC, WR w r)
+  | xs == ys = True
+  | otherwise = trace ("\n\n\n\n\n" ++ (concat $ map show xs ++ ["\n\n"] ++ map show ys)) $ False
   where
-    b' = rem k b
-    l = length b
-    rem i [] = []
-    rem i (x:xs)
-      | isDigit x = x : rem (i-1) xs
-      | i < 0     = xs
-      | otherwise = rem (i-1) xs
+    xs = go (parseEvents w)
+    ys = go (parseEvents w =$= renderEvents r =$= parseEvents w)
+    go f = runIdentity $ sourceLbs (fromChunks . toBS $ fqc) $= f $$ consume
 
--- | Removes the nth object from a list.
-
-removeNth [] _ = error "oops"
-removeNth (x:xs) 0 = xs
-removeNth (x:xs) k = x : removeNth xs (k-1)
-
--- | Some fasta with an embedded number we want to find again! In 50% of the
--- blocks, we include newlines somewhere in there
-
-someFasta idx = do
-  k1 <- choose (10,200)
-  k2 <- choose (10,200)
-  xs <- vectorOf k1 $ elements "ACGT"
-  ys <- vectorOf k2 $ elements "ACGT"
-  let number = printf "%08d" idx -- THIS EIGHT
-  let zs = xs ++ number ++ ys
-  nl <- arbitrary
-  if nl
-  then insertNewlines zs
-  else return $ zs
-
--- | insert the '\n' character every 10-250 characters.
-
-insertNewlines [] = return []
-insertNewlines xs = do
-  n <- choose (10,250)
-  let (ys,zs) = splitAt n xs
-  zsnl <- insertNewlines zs
-  return $ ys ++ "\n" ++ zsnl
-
--- | Parse 'FastaQC' as fasta "file".
-
-fromFastaQC :: Monad m => FastaQC -> GSource m ByteString
-fromFastaQC (FastaQC bs) = sourceLbs xs where
-  xs  = fromChunks $ hdr : fs
-  hdr = pack ">fromFastaQC\n"
-  fs  = map pack . lines . concatMap snd $ bs
-
-
-
--- * properties
-
--- | Equality of the original and the streamed fastaqc payload.
-
-prop_Equal fqc = xs == (BS.unpack . BS.concat . map _fastaData $ ys) where
-  xs = filter (/= '\n') . concatMap snd . blocks $ fqc
-  ys = runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize 100) $$ consume
-
--- | Try to find all embedded numbers: making use of the "past".
-
-prop_EmbeddedNumbers :: FastaQC -> Bool
-prop_EmbeddedNumbers fqc
-  | xs == ys  = True
-  | otherwise = trace (show (xs,ys,zs,runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize 100) $$ consume)) False
+prop_P_PRP_2 (OneBS o, WR w r)
+  | xs == ys = True
+  | otherwise = trace ("\n" ++ show xs ++ "\n" ++ show ys ++ "\n") $ False
   where
-    xs = sort . map fst $ blocks fqc
-    ys = concat . runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize 100) $= CL.sequence getNumbers $$ consume
-    zs = ys L.\\ xs
-
--- | Test if the 1-based index is always calculated correctly.
-
-prop_CharCount :: FastaQC -> Bool
-prop_CharCount fqc
-  | xs == ys  = True
-  | otherwise = trace (show (xs,ys)) $ False
-  where
-    xs = map int64 . snd . L.mapAccumL (\acc l -> (acc+l,acc)) 1 . map length . splitEvery wsize . filter (/= '\n') . concatMap snd . blocks $ fqc
-    ys = runIdentity $ fromFastaQC fqc $= streamFasta (WindowSize wsize) $= CL.map (unIndex . (^. firstIndex)) $$ consume
-    wsize = 100
-    splitEvery k [] = []
-    splitEvery k xs = let (h,t) = L.splitAt k xs in h : splitEvery k t
-    int64 = fromIntegral . toInteger
+    xs = go (parseEvents w)
+    ys = go (parseEvents w =$= renderEvents r =$= parseEvents w)
+    go f = runIdentity $ sourceLbs (fromChunks $ [o]) $= f $$ consume
 
 
 
--- ** helper functions for properties
-
--- | Finds numbers in the fasta stream.
-
-getNumbers :: Monad m => GLSink Fasta m [Int]
-getNumbers = do
-  fa <- CL.head
-  case fa of
-    Nothing -> return []
-    Just x  -> do
-      let pd = x ^. pastData
-      let pdl = BS.length pd
-      let fd = x ^. fastaData
-      let xs = (BS.drop (pdl-7) pd) `BS.append` fd
-      return . map snd . readAllDigits 0 $ xs
-
--- | Read the digits in 'getNumbers'.
-
-readAllDigits :: Int -> ByteString -> [(Int,Int)]
-readAllDigits k xs
-  | BS.length ts < 8     = []
-  | BS.length dCs < 8    = readAllDigits (k + BS.length is) $ BS.dropWhile isDigit ts
-  | Just (d,_) <- maybeD = (k + BS.length is, d) : readAllDigits (k + BS.length is + 8) (BS.dropWhile isDigit ts)
-  | otherwise            = []
-  where
-    (is,ts) = BS.break isDigit xs
-    dCs = BS.takeWhile isDigit ts
-    maybeD  = BS.readInt ts
+{-
+manyS :: [ByteString]
+manyS = map (`BC.snoc` '\n')
+  [ ">x y"
+  , "abc"
+  , ">a b"
+  , "def"
+  ]
+-}
 

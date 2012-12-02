@@ -1,123 +1,108 @@
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 -- Conduit-based FASTA file format reading. Designed to be used in streaming
 -- applications.
 --
--- Note that each 'Fasta' entries data is composed of bytestrings that do not
--- necessarily have a starting internal offset of 0.
+-- On parsing, one can choose the chunk size depending on the application. On
+-- rendering into bytestrings, the number of columns for each data line can be
+-- selected. This should be less than 80.
 
 module Biobase.Fasta.Import where
 
-import Control.Monad.IO.Class (MonadIO)
-import Data.ByteString.Char8 as BS
-import Data.Conduit.Binary as CB (lines)
-import Data.Conduit ((=$=),Conduit)
-import Data.Conduit.Util (conduitState, ConduitStateResult(..))
-import qualified Data.Conduit.List as CL
-import Data.Foldable (toList)
-import Data.Sequence as S
-import Prelude as P
-import Data.Lens.Common
+import Control.Arrow (second)
+import Control.Monad.IO.Class (liftIO, MonadIO (..))
+import Control.Monad (unless)
+import Data.ByteString (ByteString, breakByte, takeWhile, empty, null, uncons)
+import Data.Char
+import Data.Conduit as C
+import Data.Conduit.Binary as C
+import Data.Conduit.List as CL
+import Prelude as P hiding (null)
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
+import Bio.Core.Sequence (Offset(..))
 
 import Biobase.Fasta
 
-import Debug.Trace
+
+
+-- | Parse from 'ByteString' into 'FastaWindow's with a past.
+
+parseFastaWindows :: Monad m => Int -> Conduit ByteString m FastaWindow
+parseFastaWindows wsize = parseEvents wsize =$= CL.concatMapAccum go Nothing where
+  go (Header i d) _ = (Just (0,i,d,""), []) -- offset, identifier, description, past
+  go (Data x) Nothing = (Just (0,"","",""), [FastaW "" "" 0 x ""])
+  go (Data x) (Just (k,i,d,p)) = (Just (k + (fromIntegral $ B.length x), i, d, x), [FastaW i d (Offset k) x p])
+
+-- | Render from 'FastaWindow's into 'ByteString's.
+
+renderFastaWindows :: Monad m => Int -> Conduit FastaWindow m ByteString
+renderFastaWindows cols = CL.concatMapAccum go Nothing =$= renderEvents cols where
+  go fw Nothing = (Just (_identifier fw), [Header (_identifier fw) (_description fw), Data (_fasta fw)])
+  go fw (Just i) = if _identifier fw == i
+                     then (Just i, [Data (_fasta fw)])
+                     else go fw Nothing
+
+-- | An event is either a FASTA header or a part of a FASTA data stream,
+-- chunked into user-defineable pieces.
+
+data Event
+  = Header !ByteString !ByteString
+  | Data   !ByteString
+  deriving (Eq,Show)
+
+-- | Parse from 'ByteString' into 'Event's.
+
+parseEvents :: Monad m => Int -> GInfConduit ByteString m Event
+parseEvents wsize = loopU where
+  loopU         = awaitE >>= either return goU
+  loopH front   = awaitE >>= either (finishH   front) (goH front)
+  loopD k front = awaitE >>= either (finishD k front) (goD k front)
+  finishH   front r = let final = front empty
+                      in  unless (null final) (yield . uncurry Header . second (B.drop 1) . breakByte 32 . B.drop 1 $ final) >> return r
+  finishD k front r = let final = front empty
+                      in  unless (null final) (yield $ Data final) >> return r
+  goU s = case BC.uncons s of
+    Just ('>', _) -> goH id s
+    Just _        -> goD 0 id s
+    Nothing       -> loopU
+  goH sofar more = case uncons rpart of
+    Just (_, rpart') -> yield (uncurry Header . second (B.drop 1) . breakByte 32 . B.drop 1 $ sofar fpart) >> goU rpart'
+    Nothing          -> loopH . B.append $ sofar more
+    where (fpart,rpart) = breakByte 10 more
+  goD k sofar more
+    | Just ('>',_) <- BC.uncons more = let final = sofar empty in unless (null final) (yield $ Data final) >> goU more
+    | otherwise = case uncons rpart of
+    Just (_, rpart') -> let k' = k + B.length fpart in case k' `compare` wsize of
+                          LT -> goD k' (B.append $ sofar fpart) rpart'
+                          EQ -> yield (Data $ sofar fpart) >> goU rpart'
+                          GT -> let (lpart,rpart) = B.splitAt wsize $ sofar fpart in yield (Data lpart) >> goD 0 id (B.append rpart rpart)
+    Nothing -> let k' = k + B.length more in case k' `compare` wsize of
+                 LT -> loopD k' . B.append $ sofar more
+                 EQ -> yield (Data $ sofar more) >> loopU
+                 GT -> let (lpart,rpart) = B.splitAt wsize $ sofar more in yield (Data lpart) >> goU rpart
+    where (fpart,rpart) = breakByte 10 more
+
+-- | Render from 'Event's into 'ByteStrings'. 'cols' is the number of
+-- characters after which a newline is introduced into the stream. Such
+-- newlines are introduced only into 'Data' events.
+
+renderEvents :: Monad m => Int -> Conduit Event m ByteString
+renderEvents cols = CL.concatMap go =$= CL.map (`BC.snoc` '\n') where
+  go (Header i d) = [BC.concat $ [">",i] ++ (if null d then [] else [" ", d])]
+  go (Data xs)    = rows xs -- let rs = rows xs in (P.map (`BC.snoc` '\n') . init $ rs) ++ [last rs]
+  rows xs = let (x,xs') = B.splitAt cols xs
+            in if B.length xs <= cols
+                 then [xs]
+                 else x : rows xs'
 
 
 
--- * Conduit-based streaming FASTA parser.
-
--- | This Fasta streaming function moves windows of size 'WindowsSize', each
--- being directly adjacent to the next one. To be able to handle data on the
--- boundary between two windows, the previous window is always kept. Finally,
--- the /next/ window is added as the future.
---
--- It is the duty of the user to handle present, past, and future data
--- correctly.
-
-streamFasta :: Monad m => WindowSize -> Conduit ByteString m Fasta
-streamFasta (WindowSize wsize)
-  | wsize <= 0 = error "window size too small"
-  | otherwise  = CB.lines =$= conduitState Nix push close =$= CL.sequence addFuture =$= CL.catMaybes
-  where
-    push Nix l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing
-                                           (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty)
-                                           []
-      | otherwise             = return $ StateProducing
-                                           Nix
-                                           []
-    push (HaveHeader hdr idx cs past xs) l
-      | ">" `BS.isPrefixOf` l = return $ StateProducing
-                                           (HaveHeader (mkFastaHeader l) (mkIndex 1) S.empty "" S.empty)
-                                           [Fasta hdr idx (BS.concat $ toList xs) "" "" | S.length xs > 0]
-      | ";" `BS.isPrefixOf` l = return $ StateProducing
-                                           (HaveHeader hdr idx (cs |> l) "" S.empty)
-                                           [Fasta hdr idx (BS.concat $ toList xs) "" "" | S.length xs > 0]
-      | len <  wsize = return $ StateProducing
-                                  (HaveHeader hdr idx cs past (xs |> l))
-                                  []
-      | len >= wsize = return $ StateProducing
-                                  (HaveHeader hdr newidx cs newpast (S.singleton . BS.drop drp $ xsl))
-                                  (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p "") [0, int64 wsize ..] rs (past : rs))
-      where
-        xsl = BS.concat . toList $ xs |> l
-        len = P.sum . P.map BS.length . toList $ xs |> l
-        drp = P.length rs * wsize
-        rs  = wsizeBlocks xsl
-        newidx = idx .+ int64 drp
-        newpast = P.last rs
-    close Nix = return []
-    close (HaveHeader hdr idx cs past xs)
-      | BS.null xsl = return []
-      | otherwise   = return $ (P.zipWith3 (\i x p -> Fasta hdr (idx .+ i) x p "") [0, int64 wsize ..] rs (past : rs))
-      where
-        rs  = wsizeBlocksClose xsl
-        xsl = BS.concat . toList $ xs
-    wsizeBlocks xs
-      | BS.length xs >= wsize = BS.take wsize xs : wsizeBlocks (BS.drop wsize xs)
-      | otherwise = []
-    wsizeBlocksClose xs
-      | BS.length xs > wsize = error "we should not be here: >wsize is handled in push"
-      | BS.null xs = []
-      | otherwise = [xs]
-    int64 = fromIntegral . toInteger
-    addFuture = do
-      h <- CL.head
-      p <- CL.peek
-      case (h,p) of
-        (Nothing,_)       -> return $ Nothing
-        (Just x, Nothing) -> return $ Just x
-        (Just x, Just y)  -> return . Just $ if (x^.fastaHeader == y^.fastaHeader)
-                                             then (futureData ^= (y ^. fastaData)) x
-                                             else x
-
--- | The current state of the streaming fasta function.
-
-data StreamFastaState
-  = Nix
-  | HaveHeader
-      FastaHeader
-      FastaIndex
-      (S.Seq ByteString)
-      ByteString
-      (S.Seq ByteString)
-
-
-
--- | The window size to use.
-
-newtype WindowSize = WindowSize Int
-
--- | Step size to use.
-
-newtype StepSize = StepSize Int
-
-
-
-{-
 test :: IO ()
 test = do
-  runResourceT $ sourceFile "big.fa" $= sf3 10000 9000 $$ CL.foldM (\_ x -> liftIO $ print x) ()
--}
+  let prnt (Header i d) = BC.putStr i >> BC.putStrLn d
+      prnt (Data d)     = BC.putStrLn d
+  runResourceT $ sourceFile "big.fa" $= parseEvents 1000 $$ CL.foldM (\_ x -> liftIO $ prnt x) ()
 

@@ -5,7 +5,7 @@ maintainer:     choener@tbi.univie.ac.at
 homepage:       http://www.tbi.univie.ac.at/~choener/
 copyright:      Christian Hoener zu Siederdissen, 2011-2012
 category:       Bioinformatics
-synopsis:       Iteratee-based FASTA parser
+synopsis:       conduit-based FASTA parser
 license:        GPL-3
 license-file:   LICENSE
 build-type:     Simple
@@ -27,28 +27,31 @@ description:
 
 extra-source-files:
 
-
+flag devel
+  description: build quickcheck
+  default: False
 
 library
   build-depends:
     base >3 && <5 ,
     bytestring                      ,
+    biocore             >= 0.2      ,
     conduit             == 0.5.*    ,
     containers                      ,
-    data-lens           == 2.10.*   ,
-    data-lens-template  == 2.1.5.*  ,
-    mtl                 == 2.1.2.*  ,
-    QuickCheck          == 2.5.*    ,
-    transformers                    ,
-    vector              == 0.9.*
+    transformers
+  if flag(devel)
+    build-depends:
+      QuickCheck      >= 2.5        ,
+      quickcheck-instances >= 0.3
+    exposed-modules:
+      Biobase.Fasta.QuickCheck
 
   exposed-modules:
     Biobase.Fasta
     Biobase.Fasta.Import
-    Biobase.Fasta.QuickCheck
 
   ghc-options:
-    -O2 -funbox-strict-fields
+    -O2
 
 
 
