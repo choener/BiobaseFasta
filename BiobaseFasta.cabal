@@ -18,6 +18,9 @@ description:
                 is available, in case some data sits on the boundary between
                 windows.
                 .
+                FastaTool is a simple tool providing information on FASTA
+                files, and allowing to extract sequences and subsequences.
+                .
                 The library is, in general, in a "preview" state. In cases
                 where you need to scan large FASTA files fast and with low
                 memory overhead, the 'streamFasta' function, however, should
@@ -41,8 +44,7 @@ library
     transformers
   if flag(devel)
     build-depends:
-      QuickCheck      >= 2.5        ,
-      quickcheck-instances >= 0.3
+      QuickCheck      >= 2.5        
     exposed-modules:
       Biobase.Fasta.QuickCheck
 
@@ -53,6 +55,13 @@ library
   ghc-options:
     -O2
 
+executable FastaTool
+  main-is:
+    FastaTool.hs
+  build-depends:
+    cmdargs == 0.10.*
+  ghc-options:
+    -O2
 
 
 source-repository head

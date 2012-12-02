@@ -20,4 +20,4 @@ data FastaWindow = FastaW
   , _fasta        :: !ByteString    -- ^ window data
   , _past         :: !ByteString    -- ^ the last window we saw. "" on first window.
   }
-  deriving (Show)
+  deriving (Show,Eq)
