@@ -3,7 +3,7 @@ version:        0.0.1.0
 author:         Christian Hoener zu Siederdissen
 maintainer:     choener@tbi.univie.ac.at
 homepage:       http://www.tbi.univie.ac.at/~choener/
-copyright:      Christian Hoener zu Siederdissen, 2011-2012
+copyright:      Christian Hoener zu Siederdissen, 2011-2013
 category:       Bioinformatics
 synopsis:       conduit-based FASTA parser
 license:        GPL-3
@@ -29,24 +29,16 @@ description:
 
 
 extra-source-files:
-
-flag devel
-  description: build quickcheck
-  default: False
+  changelog
 
 library
   build-depends:
     base >3 && <5 ,
-    bytestring                      ,
     biocore             >= 0.2      ,
+    bytestring                      ,
     conduit             == 0.5.*    ,
     containers                      ,
     transformers
-  if flag(devel)
-    build-depends:
-      QuickCheck      >= 2.5        
-    exposed-modules:
-      Biobase.Fasta.QuickCheck
 
   exposed-modules:
     Biobase.Fasta
@@ -62,7 +54,6 @@ executable FastaTool
     cmdargs == 0.10.*
   ghc-options:
     -O2
-
 
 source-repository head
   type: git
