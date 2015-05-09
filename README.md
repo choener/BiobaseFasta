@@ -1,4 +1,6 @@
-# BiobaseFASTA
+[![Build Status](https://travis-ci.org/choener/BiobaseFasta.svg?branch=master)](https://travis-ci.org/choener/BiobaseFasta)
+
+# BiobaseFasta
 
 ## A Haskell library for FASTA-file handling.
 
@@ -23,3 +25,12 @@ The library is, in general, in a "preview" state. In cases
 where you need to scan large FASTA files fast and with low
 memory overhead, the enumeratees should, however, already be
 useable enough.
+
+
+
+#### Contact
+
+Christian Hoener zu Siederdissen
+choener@bioinf.uni-leipzig.de
+Leipzig University, Leipzig, Germany
+
