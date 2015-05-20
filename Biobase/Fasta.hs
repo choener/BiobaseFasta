@@ -1,12 +1,23 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE EmptyDataDecls #-}
+{- LANGUAGE TemplateHaskell #-}
+{- LANGUAGE OverloadedStrings #-}
+{- LANGUAGE FlexibleInstances #-}
+{- LANGUAGE EmptyDataDecls #-}
 
 -- | This module is currently home to a preliminary version of indices based
 -- on a minimal index of 'Zero' or 'One' (and possibly others).
 
-module Biobase.Fasta where
+module Biobase.Fasta
+  ( module Biobase.Fasta.Types
+  , module Biobase.Fasta.Import
+  ) where
+
+
+
+import Biobase.Fasta.Types
+import Biobase.Fasta.Import ()
+
+
+{-
 
 import Data.ByteString.Char8 (ByteString)
 import Bio.Core.Sequence (Offset(..))
@@ -21,3 +32,5 @@ data FastaWindow = FastaW
   , _past         :: !ByteString    -- ^ the last window we saw. "" on first window.
   }
   deriving (Show,Eq)
+-}
+

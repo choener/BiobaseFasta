@@ -1,6 +1,6 @@
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{- LANGUAGE Rank2Types #-}
+{- LANGUAGE PatternGuards #-}
+{- LANGUAGE OverloadedStrings #-}
 
 -- Conduit-based FASTA file format reading. Designed to be used in streaming
 -- applications.
@@ -10,6 +10,10 @@
 -- selected. This should be less than 80.
 
 module Biobase.Fasta.Import where
+
+
+
+{-
 
 import Control.Arrow (second)
 import Control.Monad.IO.Class (liftIO, MonadIO (..))
@@ -115,4 +119,6 @@ test = do
   let prnt (Header i d) = BC.putStr i >> BC.putStrLn d
       prnt (Data d)     = BC.putStrLn d
   runResourceT $ sourceFile "big.fa" $= parseEvents 1000 $$ CL.foldM (\_ x -> liftIO $ prnt x) ()
+
+-}
 
