@@ -1,18 +1,16 @@
 
 module Biobase.Fasta.Conduit where
 
-
-
 import           Conduit
+import           Control.Arrow ((***))
 import           Control.Monad (unless)
 import           Data.ByteString.Char8 (ByteString)
 import           Data.Conduit.Zlib (ungzip,gzip)
 import           Data.List (isSuffixOf)
---import qualified Data.ByteString as BS
+import           Data.Monoid (mappend)
 import qualified Data.ByteString.Char8 as BS
-import           Control.Arrow ((***))
 
-import Biobase.Fasta.Types
+import           Biobase.Fasta.Types
 
 
 
