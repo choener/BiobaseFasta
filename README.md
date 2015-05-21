@@ -7,7 +7,8 @@
 This re-written version (0.0.1.0) is based on the conduit library and includes
 some preliminary abstraction mechanism over zero- and one-based indices.
 
-
+The wikipedia has information on the format:  
+<http://en.wikipedia.org/wiki/FASTA_format>
 
 
 ## Old 0.0.0.x text:

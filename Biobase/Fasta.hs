@@ -8,13 +8,13 @@
 
 module Biobase.Fasta
   ( module Biobase.Fasta.Types
-  , module Biobase.Fasta.Import
+  , module Biobase.Fasta.Conduit
   ) where
 
 
 
 import Biobase.Fasta.Types
-import Biobase.Fasta.Import ()
+import Biobase.Fasta.Conduit
 
 
 {-
