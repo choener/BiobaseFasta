@@ -31,10 +31,11 @@ instance NFData StreamEvent
 -- TODO This is a 1-based format? Lets use the BiobaseTypes facilities!
 
 data LineInfo = LineInfo
-  { firstLine :: !Int
-  , firstCol  :: !Int
-  , lastLine  :: !Int
-  , lastCol   :: !Int
+  { firstLine   :: !Int   -- ^ first line for this chunk @(lines in complete file!)@
+  , firstCol    :: !Int   -- ^ first column in first line for this chunk
+  , lastLine    :: !Int   -- ^ last line for this chunk @(lines in complete file!)@
+  , lastCol     :: !Int   -- ^ last column in last line for this chunk
+  , firstIndex  :: !Int   -- ^ first index in this fasta block. Counts just the number of symbols in the @Fasta@ payload.
   }
   deriving (Show,Eq,Ord,Data,Typeable,Generic)
 

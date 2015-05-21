@@ -36,27 +36,27 @@ sinkFasta width fp
 
 streamEvent :: Monad m => Int -> Conduit ByteString m StreamEvent
 streamEvent csize = linesUnboundedAsciiC =$= start
-  where start  = await >>= loop (LineInfo 1 1 1 1)
+  where start  = await >>= loop (LineInfo 1 1 1 1 1)
         -- nothing to do at all
         loop _ Nothing = return ()
         -- starting from the top, nothing in buffer
-        loop (LineInfo lf cf lt ct) (Just x)
+        loop (LineInfo lf cf lt ct idx) (Just x)
           -- found an empty line
-          | BS.null x             = await >>= loop (LineInfo (lf+1) 1 (lf+1) 1)
+          | BS.null x             = await >>= loop (LineInfo (lf+1) 1 (lf+1) 1 idx)
           -- found a header line
-          | BS.head x `elem` ">;" = do yield (StreamHeader x (LineInfo lf 1 lf (BS.length x)))
-                                       await >>= loop (LineInfo (lf+1) 1 (lf+1) 1)
+          | BS.head x `elem` ">;" = do yield (StreamHeader x (LineInfo lf 1 lf (BS.length x) 1))
+                                       await >>= loop (LineInfo (lf+1) 1 (lf+1) 1 1)
           -- have enough bytes to emit stream data; yield and but the
           -- remainder of the chunk into the buffer
-          | BS.length x >= csize  = do yield (StreamFasta hd BS.empty (LineInfo lf cf lt (BS.length hd)))
-                                       loop (LineInfo lt (BS.length hd +1) lt (BS.length hd +1)) (Just tl)
+          | BS.length x >= csize  = do yield (StreamFasta hd BS.empty (LineInfo lf cf lt (BS.length hd) idx))
+                                       loop (LineInfo lt (BS.length hd +1) lt (BS.length hd +1) (idx + BS.length hd)) (Just tl)
           -- we don't have enough bytes for a chunk. Is the stream ended?
           -- If so, yield if some bytes are left over. If the stream is not
           -- ended, collect bytes for next chunk.
           | otherwise             = do mx <- await
                                        case mx of
-                                         Nothing -> unless (BS.null hd) $ yield (StreamFasta x BS.empty (LineInfo lf cf lt (BS.length x)))
-                                         Just x' -> loop (LineInfo lf cf (lt+1) 1) (Just $ x `mappend` x')
+                                         Nothing -> unless (BS.null hd) $ yield (StreamFasta x BS.empty (LineInfo lf cf lt (BS.length x) idx))
+                                         Just x' -> loop (LineInfo lf cf (lt+1) 1 idx) (Just $ x `mappend` x')
           where (hd,tl) = BS.splitAt csize x
 {-# Inline streamEvent #-}
 
@@ -64,7 +64,17 @@ streamEvent csize = linesUnboundedAsciiC =$= start
 -- columns in the file
 
 unStreamEvent :: Monad m => Int -> Conduit StreamEvent m ByteString
-unStreamEvent width = undefined
+unStreamEvent width = start =$= unlinesAsciiC
+  where start = await >>= loop
+        loop Nothing = return ()
+        loop (Just (StreamHeader x   _)) = yield x >> await >>= loop
+        loop (Just (StreamFasta  x p i))
+          | BS.length x >= width = yield hd >> loop (Just $ StreamFasta tl p i)
+          | otherwise            = do mx <- await
+                                      case mx of
+                                        Nothing                   -> unless (BS.null hd) $ yield x
+                                        Just (StreamFasta x' _ _) -> loop (Just $ StreamFasta (x `mappend` x') p i)
+          where (hd,tl) = BS.splitAt width x
 {-# Inline unStreamEvent #-}
 
 

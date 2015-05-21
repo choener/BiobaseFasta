@@ -17,6 +17,11 @@ fff = undefined
 
 
 
+-- | Generate a random in-memory @Fasta@ bytestring.
+-- Then @fasta === unstreamEvents (streamEvents fasta)@
+-- (With the respective @conduit@ stuff around)
+
+
 main :: IO ()
 main = $(defaultMainGenerator)
 
