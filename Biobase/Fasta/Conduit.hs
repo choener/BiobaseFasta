@@ -6,6 +6,7 @@ import           Control.Arrow ((***))
 import           Control.Monad (unless)
 import           Data.ByteString.Char8 (ByteString)
 import           Data.Conduit.Zlib (ungzip,gzip)
+import           Data.Foldable
 import           Data.List (isSuffixOf)
 import           Data.Monoid (mappend)
 import qualified Data.ByteString.Char8 as BS
@@ -53,7 +54,7 @@ streamEvent csize = linesUnboundedAsciiC =$= start
         emitFulls xs
           | S.null xs                          = return xs
           | ((u,lnfo),l) S.:< us <- S.viewl ts = let (uh,ut) = BS.splitAt (csize - hsl) u
-                                                     x = uh `mappend` foldl mappend BS.empty (fmap (fst . fst) hs)
+                                                     x = BS.concat $ uh : (toList $ fmap (fst . fst) hs)
                                                      LineInfo fl fc tl tc c = lnfo
                                                      (_,LineInfo fl' fc' _ _ c') S.:< _ = S.viewl xs
                                                  in  do yield $ StreamFasta x BS.empty (LineInfo fl' fc' tl (tc - BS.length ut) c')
@@ -66,7 +67,7 @@ streamEvent csize = linesUnboundedAsciiC =$= start
         -- elements at this point
         emitRemainder xs
           | S.null xs = return ()
-          | otherwise = let x = foldl mappend BS.empty $ fmap fst xs
+          | otherwise = let x = BS.concat . toList $ fmap fst xs
                             (_,LineInfo fl fc _ _ c) S.:< _ = S.viewl xs
                             _ S.:> (_,LineInfo _ _ tl tc _) = S.viewr xs
                         in  yield $ StreamFasta x BS.empty (LineInfo fl fc tl tc c)

@@ -38,6 +38,13 @@ extra-source-files:
 
 
 
+flag llvm
+  description: use llvm backend
+  default: False
+  manual:  True
+
+
+
 library
   build-depends: base                 >= 4.7    && < 4.9
                , aeson                >= 0.8    && < 0.9
@@ -68,13 +75,27 @@ library
 
 
 
---executable FastaTool
---  main-is:
---    FastaTool.hs
---  build-depends:
---    cmdargs == 0.10.*
---  ghc-options:
---    -O2
+executable FastaFileStatistics
+  build-depends: base
+               , BiobaseFasta
+               , bytestring
+               , cmdargs              == 0.10.*
+               , conduit-combinators
+  default-language:
+    Haskell2010
+  default-extensions: BangPatterns
+                    , DeriveDataTypeable
+                    , RecordWildCards
+                    , ScopedTypeVariables
+  hs-source-dirs:
+    src
+  main-is:
+    FastaFileStatistics.hs
+  ghc-options:
+    -O2 -funbox-strict-fields
+  if flag(llvm)
+    ghc-options:
+      -fllvm -optlo-O3 -optlo-std-compile-opts
 
 
 
