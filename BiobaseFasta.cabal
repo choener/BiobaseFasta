@@ -70,6 +70,7 @@ library
                     , DeriveDataTypeable
                     , DeriveGeneric
                     , RankNTypes
+                    , RecordWildCards
   ghc-options:
     -O2
 

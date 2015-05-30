@@ -36,7 +36,7 @@ main = do
   o <- cmdArgs options
   case o of
     Options{..} -> do ml <- runResourceT $ if null infile
-                                            then sourceHandle stdin =$= streamEvent size $$ foldlC stats 0
-                                            else sourceFastaFile size infile             $$ foldlC stats 0
+                                            then sourceHandle stdin =$= sizedStreamEvent size $$ foldlC stats 0
+                                            else sourceFastaFile size infile $$ foldlC stats 0
                       print ml
 
