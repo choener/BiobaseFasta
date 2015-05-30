@@ -9,6 +9,7 @@ import           Data.Conduit.Zlib (ungzip,gzip)
 import           Data.List (isSuffixOf)
 import           Data.Monoid (mappend)
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.Sequence as S
 
 import           Biobase.Fasta.Types
 
@@ -17,47 +18,58 @@ import           Biobase.Fasta.Types
 -- | Open a fasta file for reading. If the suffix is @.gz@, all data is
 -- decompressed via @ungzip@.
 
-sourceFasta :: (MonadResource m) => Int -> FilePath -> Producer m StreamEvent
-sourceFasta csize fp
+sourceFastaFile :: (MonadResource m) => Int -> FilePath -> Producer m StreamEvent
+sourceFastaFile csize fp
   | ".gz" `isSuffixOf` fp = sourceFile fp =$= ungzip =$= streamEvent csize
   | otherwise             = sourceFile fp            =$= streamEvent csize
-{-# Inline sourceFasta #-}
+{-# Inline sourceFastaFile #-}
 
 -- | Write to a fasta file. If the suffix is @.gz@, all data is compressed
 -- via @gzip@.
 
-sinkFasta :: (MonadResource m) => Int -> FilePath -> Consumer StreamEvent m ()
-sinkFasta width fp
+sinkFastaFile :: (MonadResource m) => Int -> FilePath -> Consumer StreamEvent m ()
+sinkFastaFile width fp
   | ".gz" `isSuffixOf` fp = unStreamEvent width =$= gzip =$= sinkFile fp
   | otherwise             = unStreamEvent width          =$= sinkFile fp
-{-# Inline sinkFasta #-}
+{-# Inline sinkFastaFile #-}
 
 -- | Create stream events with chunked size @csize@.
 
 streamEvent :: Monad m => Int -> Conduit ByteString m StreamEvent
 streamEvent csize = linesUnboundedAsciiC =$= start
-  where start  = await >>= loop (LineInfo 1 1 1 1 1)
-        -- nothing to do at all
-        loop _ Nothing = return ()
-        -- starting from the top, nothing in buffer
-        loop (LineInfo lf cf lt ct idx) (Just x)
-          -- found an empty line
-          | BS.null x             = await >>= loop (LineInfo (lf+1) 1 (lf+1) 1 idx)
-          -- found a header line
-          | BS.head x `elem` ">;" = do yield (StreamHeader x (LineInfo lf 1 lf (BS.length x) 1))
-                                       await >>= loop (LineInfo (lf+1) 1 (lf+1) 1 1)
-          -- have enough bytes to emit stream data; yield and but the
-          -- remainder of the chunk into the buffer
-          | BS.length x >= csize  = do yield (StreamFasta hd BS.empty (LineInfo lf cf lt (BS.length hd) idx))
-                                       loop (LineInfo lt (BS.length hd +1) lt (BS.length hd +1) (idx + BS.length hd)) (Just tl)
-          -- we don't have enough bytes for a chunk. Is the stream ended?
-          -- If so, yield if some bytes are left over. If the stream is not
-          -- ended, collect bytes for next chunk.
-          | otherwise             = do mx <- await
-                                       case mx of
-                                         Nothing -> unless (BS.null hd) $ yield (StreamFasta x BS.empty (LineInfo lf cf lt (BS.length x) idx))
-                                         Just x' -> loop (LineInfo lf cf (lt+1) 1 idx) (Just $ x `mappend` x')
-          where (hd,tl) = BS.splitAt csize x
+  where start  = await >>= loop 1 1 S.empty
+        -- no more lines, check buffer
+        loop _ _ buf Nothing
+          | S.null buf = return ()
+          | otherwise  = emitFulls buf >>= emitRemainder
+        loop !line !ix buf (Just x)
+          | BS.null x             = await >>= loop (line+1) ix buf
+          | BS.head x `elem` ">;" = do emitFulls buf >>= emitRemainder
+                                       yield (StreamHeader x (LineInfo line 1 line (BS.length x) 1))
+                                       await >>= loop (line+1) 1 S.empty
+          | otherwise             = do buf' <- emitFulls (buf S.|> (x , LineInfo line 1 line (BS.length x) ix))
+                                       await >>= loop (line+1) (ix + BS.length x) buf'
+        -- will yield StreamEvents until no full element is left
+        emitFulls xs
+          | S.null xs                          = return xs
+          | ((u,lnfo),l) S.:< us <- S.viewl ts = let (uh,ut) = BS.splitAt (csize - hsl) u
+                                                     x = uh `mappend` foldl mappend BS.empty (fmap (fst . fst) hs)
+                                                     LineInfo fl fc tl tc c = lnfo
+                                                     (_,LineInfo fl' fc' _ _ c') S.:< _ = S.viewl xs
+                                                 in  do yield $ StreamFasta x BS.empty (LineInfo fl' fc' tl (tc - BS.length ut) c')
+                                                        emitFulls $ if BS.null ut then fmap fst us else (ut,LineInfo fl (fc + BS.length uh) tl tc (c+BS.length uh)) S.<| fmap fst us
+          | otherwise                          = return xs
+          where -- this splits into @hs@ which are together smaller than @csize@ and @ts@ whose first element then is larger
+                (hs,ts) = S.spanl ((<csize) . snd) $ S.zip xs (S.scanl1 (+) $ fmap (BS.length . fst) xs)
+                hsl     = sum . fmap snd $ hs :: Int
+        -- will emit a remainder element. there should be no more full
+        -- elements at this point
+        emitRemainder xs
+          | S.null xs = return ()
+          | otherwise = let x = foldl mappend BS.empty $ fmap fst xs
+                            (_,LineInfo fl fc _ _ c) S.:< _ = S.viewl xs
+                            _ S.:> (_,LineInfo _ _ tl tc _) = S.viewr xs
+                        in  yield $ StreamFasta x BS.empty (LineInfo fl fc tl tc c)
 {-# Inline streamEvent #-}
 
 -- | Write events back to disk as a fasta file. Want to know the number of
@@ -81,47 +93,9 @@ unStreamEvent width = start =$= unlinesAsciiC
 
 {-
 
-import           Data.ByteString (ByteString)
-import           Data.Conduit
-import qualified Data.Conduit.Binary as CB
-import qualified Data.Conduit.List   as CL
-import           Data.Char (ord)
-import           Data.Word (Word8)
-
-
-
--- | Stream a @Fasta@ file in constant space, independent of the line
--- length in the @Fasta@ file. The first argument is the function to
--- transform a single @Fasta@ entry.
---
--- If the @Fasta@ entry contains comments, only the first comment is made
--- available, and only if it starts directly after the @Fasta@ header.
---
--- Internal to inner handler, no whitespaces are available, i.e. the
--- @Fasta@ file is given as a single stream.
-
-foldFastaSequences
-  :: (Monad m)
-  => (FastaHeader -> ConduitM ByteString o m a)
-  -> ConduitM ByteString o m a
-foldFastaSequences f = loop
-  where
-    loop = do
-      a <- CB.takeWhile (/= c2w '\n') =$= do
-        a <- f undefined
-        CL.sinkNull
-        return a
-      CB.drop 1
-      loop
-
--- | 
-
-type FastaHeader = (ByteString,ByteString)
-
--- |
-
-c2w :: Char -> Word8
-c2w = fromIntegral . ord
+test k = do
+  xs <- runResourceT $ sourceFastaFile k "/home/choener/Documents/Workdata/DNA-Protein/physarum-protein.fa" $$ sinkList
+  mapM_ print $ take 10 xs
 
 -}
 
