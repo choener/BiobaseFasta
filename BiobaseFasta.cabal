@@ -21,11 +21,6 @@ description:
                 .
                 FastaTool is a simple tool providing information on FASTA
                 files, and allowing to extract sequences and subsequences.
-                .
-                The library is, in general, in a "preview" state. In cases
-                where you need to scan large FASTA files fast and with low
-                memory overhead, the 'streamFasta' function, however, should
-                already be useable enough.
 
 
 
@@ -92,6 +87,30 @@ executable FastaFileStatistics
     src
   main-is:
     FastaFileStatistics.hs
+  ghc-options:
+    -O2 -funbox-strict-fields
+  if flag(llvm)
+    ghc-options:
+      -fllvm -optlo-O3 -optlo-std-compile-opts
+
+
+
+executable FastaTool
+  build-depends: base
+               , BiobaseFasta
+               , bytestring
+               , cmdargs              == 0.10.*
+               , conduit-combinators
+  default-language:
+    Haskell2010
+  default-extensions: BangPatterns
+                    , DeriveDataTypeable
+                    , RecordWildCards
+                    , ScopedTypeVariables
+  hs-source-dirs:
+    src
+  main-is:
+    FastaTool.hs
   ghc-options:
     -O2 -funbox-strict-fields
   if flag(llvm)

@@ -10,7 +10,6 @@ import           Data.Foldable
 import           Data.List (isSuffixOf)
 import           Data.Monoid (mappend)
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.Sequence as S
 
 import           Biobase.Fasta.Types
 
@@ -87,7 +86,7 @@ sizedStreamEvent csize = linesUnboundedAsciiC =$= start
         loop _ _ buf Nothing
           | null buf  = return ()
           | otherwise = emitFulls buf >>= emitRemainder
-        loop !line !ix buf (Just x)
+        loop !line !ix !buf (Just x)
           | BS.null x             = await >>= loop (line+1) ix buf
           | BS.head x `elem` ">;" = do emitFulls buf >>= emitRemainder
                                        yield (StreamHeader x (LineInfo line 1 line (BS.length x) 1))
@@ -97,7 +96,7 @@ sizedStreamEvent csize = linesUnboundedAsciiC =$= start
         -- will yield StreamEvents until no full element is left
         emitFulls xs
           | null xs       = return xs
-          | csize < totln = return xs
+          | csize > totln = return xs
           | not (null ts) = let hsl               = sum $ map snd hs
                                 ((u,lnfo),l) : us = ts
                                 (uh,ut)           = BS.splitAt (csize - hsl) u
@@ -135,6 +134,7 @@ unStreamEvent width = start =$= unlinesAsciiC
                                       case mx of
                                         Nothing                   -> unless (BS.null hd) $ yield x
                                         Just (StreamFasta x' _ _) -> loop (Just $ StreamFasta (x `mappend` x') p i)
+                                        Just (StreamHeader x'  _) -> yield x >> yield x' >> await >>= loop
           where (hd,tl) = BS.splitAt width x
 {-# Inline unStreamEvent #-}
 

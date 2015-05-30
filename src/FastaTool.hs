@@ -1,5 +1,7 @@
 
--- |
+-- | A small tool for Fasta files.
+--
+-- - Reformats with requested number of columns.
 
 module Main where
 
@@ -13,9 +15,10 @@ import           Biobase.Fasta
 
 
 
-data Options = Options
+data Options
+  = Reformat
   { infile  :: String
-  , size    :: Int
+  , columns :: Int
   }
   deriving (Show,Data,Typeable)
 
@@ -24,19 +27,16 @@ data Options = Options
 -- complete bytestring anyway, so we make it strict. We don't mmap because
 -- the whole string is loaded.
 
-options = Options
-  { infile  =  def &= help ""
-  , size    = 1000 &= help "maximal chunked block size"
-  }
-
-stats !k (StreamHeader _ _)  = k
-stats !k (StreamFasta x _ _) = k + BS.length x
+reformat = Reformat
+  { infile  = def &= help ""
+  , columns =  70 &= help "number of columns for output"
+  } &= help "reformat Fasta file to a set number of columns"
 
 main = do
-  o <- cmdArgs options
+  o <- cmdArgs $ modes [reformat]
   case o of
-    Options{..} -> do ml <- runResourceT $ if null infile
-                                            then sourceHandle stdin =$= streamEvent $$ foldlC stats 0
-                                            else sourceFastaFile size infile $$ foldlC stats 0
-                      print ml
+    Reformat{..} -> runResourceT $
+      if null infile
+        then sourceHandle stdin =$= streamEvent =$= unStreamEvent columns $$ stdoutC
+        else sourceFastaFile columns infile     =$= unStreamEvent columns $$ stdoutC
 
