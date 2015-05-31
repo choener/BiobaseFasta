@@ -29,8 +29,8 @@ options = Options
   , size    = 1000 &= help "maximal chunked block size"
   }
 
-stats !k (StreamHeader _ _)  = k
-stats !k (StreamFasta x _ _) = k + BS.length x
+stats !k (StreamHeader _ _)    = k
+stats !k (StreamFasta x _ _ _) = k + BS.length x
 
 main = do
   o <- cmdArgs options

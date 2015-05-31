@@ -19,7 +19,7 @@ data StreamEvent
   = StreamHeader  { streamHeader  :: !ByteString, streamLines :: !LineInfo }
   -- | A data event. We keep a pointer to the previous chunk (which is
   -- useful for some algorithms). The chunk is free of newlines!
-  | StreamFasta   { streamFasta   :: !ByteString, prevStreamFasta :: !ByteString, streamLines :: !LineInfo }
+  | StreamFasta   { streamFasta   :: !ByteString, prevStreamFasta :: !ByteString, streamLines :: !LineInfo, streamHeader :: !ByteString }
   deriving (Show,Eq,Ord,Data,Typeable,Generic)
 
 instance NFData StreamEvent

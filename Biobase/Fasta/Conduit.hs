@@ -20,8 +20,8 @@ import           Biobase.Fasta.Types
 
 sourceFastaFile :: (MonadResource m) => Int -> FilePath -> Producer m StreamEvent
 sourceFastaFile csize fp
-  | ".gz" `isSuffixOf` fp = sourceFile fp =$= ungzip =$= sizedStreamEvent csize
-  | otherwise             = sourceFile fp            =$= sizedStreamEvent csize
+  | ".gz" `isSuffixOf` fp = sourceFile fp =$= ungzip =$= sizedStreamEvent csize =$= addStreamHeader
+  | otherwise             = sourceFile fp            =$= sizedStreamEvent csize =$= addStreamHeader
 {-# Inline sourceFastaFile #-}
 
 -- | Write to a fasta file. If the suffix is @.gz@, all data is compressed
@@ -32,6 +32,32 @@ sinkFastaFile width fp
   | ".gz" `isSuffixOf` fp = unStreamEvent width =$= gzip =$= sinkFile fp
   | otherwise             = unStreamEvent width          =$= sinkFile fp
 {-# Inline sinkFastaFile #-}
+
+-- | Remove StreamHeader events
+
+removeHeaderEvents :: Monad m => Conduit StreamEvent m StreamEvent
+removeHeaderEvents = filterC f
+  where f StreamHeader{} = False
+        f _              = True
+{-# Inline removeHeaderEvents #-}
+
+-- | Adds the @streamHeader@ to each fasta element
+
+addStreamHeader :: Monad m => Conduit StreamEvent m StreamEvent
+addStreamHeader = await >>= loop BS.empty
+  where loop hdr Nothing = return ()
+        loop _   (Just x@(StreamHeader hdr _)) = yield x                     >> await >>= loop hdr
+        loop hdr (Just x@StreamFasta{})        = yield x{streamHeader = hdr} >> await >>= loop hdr
+{-# Inline addStreamHeader #-}
+
+-- | Fills 'prevStreamFasta'.
+
+addPrevStreamFasta :: Monad m => Conduit StreamEvent m StreamEvent
+addPrevStreamFasta = await >>= loop BS.empty
+  where loop prv Nothing = return ()
+        loop prv (Just x@StreamFasta{}) = yield x { prevStreamFasta = prv } >> await >>= loop (streamFasta x)
+        loop prv (Just x) = yield x >> await >>= loop BS.empty
+{-# Inline addPrevStreamFasta #-}
 
 -- | Returns line-based @StreamEvents@, with the line length the same as in
 -- the data.
@@ -46,7 +72,7 @@ streamEvent = linesUnboundedAsciiC =$= start
         loop line atoms (Just x)
           | BS.null x             = await >>= loop (line+1) atoms
           | BS.head x `elem` ">;" = yield (StreamHeader x (LineInfo line 1 line (BS.length x) 0)) >> await >>= loop (line+1) 1
-          | otherwise             = yield (StreamFasta x BS.empty (LineInfo line 1 line (BS.length x) atoms)) >> await >>= loop (line+1) (atoms + BS.length x)
+          | otherwise             = yield (StreamFasta x BS.empty (LineInfo line 1 line (BS.length x) atoms) BS.empty) >> await >>= loop (line+1) (atoms + BS.length x)
 {-# Inline streamEvent #-}
 
 -- | Collapses chunks of @StreamEvent@s in a manner that each collapsed
@@ -68,7 +94,7 @@ minSizedStreamEvent csize = start
         emit buf = let fub = reverse buf
                        (LineInfo fl fc _  _  fa) = streamLines $ head fub
                        (LineInfo _  _  ll lc _ ) = streamLines $ head buf
-                   in  yield (StreamFasta (BS.concat $ map streamFasta fub) BS.empty (LineInfo fl fc ll lc fa))
+                   in  yield (StreamFasta (BS.concat $ map streamFasta fub) BS.empty (LineInfo fl fc ll lc fa) BS.empty)
 {-# Inline minSizedStreamEvent #-}
 
 -- | Create stream events with chunked size @csize@. The size hint is
@@ -103,7 +129,7 @@ sizedStreamEvent csize = linesUnboundedAsciiC =$= start
                                 x                 = BS.concat $ uh : (map (fst . fst) hs)
                                 LineInfo fl fc tl tc c = lnfo
                                 (_,LineInfo fl' fc' _ _ c') : _ = sx
-                            in  do yield $ StreamFasta x BS.empty (LineInfo fl' fc' tl (tc - BS.length ut) c')
+                            in  do yield $ StreamFasta x BS.empty (LineInfo fl' fc' tl (tc - BS.length ut) c') BS.empty
                                    emitFulls $ if BS.null ut then map fst (reverse us) else reverse ((ut,LineInfo fl (fc + BS.length uh) tl tc (c+BS.length uh)) : map fst us)
           | otherwise     = return xs
           where sx      = reverse xs
@@ -117,7 +143,7 @@ sizedStreamEvent csize = linesUnboundedAsciiC =$= start
                             x = BS.concat . toList $ fmap fst sx
                             (_,LineInfo fl fc _ _ c) : _ = sx
                             (_,LineInfo _ _ tl tc _) : _ = xs
-                        in  yield $ StreamFasta x BS.empty (LineInfo fl fc tl tc c)
+                        in  yield $ StreamFasta x BS.empty (LineInfo fl fc tl tc c) BS.empty
 {-# Inline sizedStreamEvent #-}
 
 -- | Write events back to disk as a fasta file. Want to know the number of
@@ -128,13 +154,13 @@ unStreamEvent width = start =$= unlinesAsciiC
   where start = await >>= loop
         loop Nothing = return ()
         loop (Just (StreamHeader x   _)) = yield x >> await >>= loop
-        loop (Just (StreamFasta  x p i))
-          | BS.length x >= width = yield hd >> loop (Just $ StreamFasta tl p i)
+        loop (Just (StreamFasta  x p i h))
+          | BS.length x >= width = yield hd >> loop (Just $ StreamFasta tl p i h)
           | otherwise            = do mx <- await
                                       case mx of
-                                        Nothing                   -> unless (BS.null hd) $ yield x
-                                        Just (StreamFasta x' _ _) -> loop (Just $ StreamFasta (x `mappend` x') p i)
-                                        Just (StreamHeader x'  _) -> yield x >> yield x' >> await >>= loop
+                                        Nothing                     -> unless (BS.null hd) $ yield x
+                                        Just (StreamFasta x' _ _ _) -> loop (Just $ StreamFasta (x `mappend` x') p i h)
+                                        Just (StreamHeader x'  _)   -> yield x >> yield x' >> await >>= loop
           where (hd,tl) = BS.splitAt width x
 {-# Inline unStreamEvent #-}
 
