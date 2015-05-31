@@ -6,7 +6,7 @@ import           Control.Arrow ((***))
 import           Control.Monad (unless)
 import           Data.ByteString.Char8 (ByteString)
 import           Data.Conduit.Zlib (ungzip,gzip)
-import           Data.Foldable
+import           Data.Foldable (toList)
 import           Data.List (isSuffixOf)
 import           Data.Monoid (mappend)
 import qualified Data.ByteString.Char8 as BS
@@ -100,7 +100,7 @@ sizedStreamEvent csize = linesUnboundedAsciiC =$= start
           | not (null ts) = let hsl               = sum $ map snd hs
                                 ((u,lnfo),l) : us = ts
                                 (uh,ut)           = BS.splitAt (csize - hsl) u
-                                x                 = BS.concat $ uh : (toList $ fmap (fst . fst) hs)
+                                x                 = BS.concat $ uh : (map (fst . fst) hs)
                                 LineInfo fl fc tl tc c = lnfo
                                 (_,LineInfo fl' fc' _ _ c') : _ = sx
                             in  do yield $ StreamFasta x BS.empty (LineInfo fl' fc' tl (tc - BS.length ut) c')
