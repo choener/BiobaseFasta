@@ -1,0 +1,11 @@
+resolver: lts-3.15
+packages:
+- '.'
+- location: ../Lib-BiobaseTypes/
+  extra-dep: true
+extra-deps:
+- cereal-text-0.1.0.1
+- OrderedBits-0.0.1.0
+- PrimitiveArray-0.7.0.0
+flags: {}
+

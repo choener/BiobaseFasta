@@ -33,13 +33,6 @@ extra-source-files:
 
 
 
-flag llvm
-  description: use llvm backend
-  default: False
-  manual:  True
-
-
-
 library
   build-depends: base                 >= 4.7    && < 4.9
                , aeson                >= 0.8    && < 0.9
@@ -89,9 +82,6 @@ executable FastaFileStatistics
     FastaFileStatistics.hs
   ghc-options:
     -O2 -funbox-strict-fields
-  if flag(llvm)
-    ghc-options:
-      -fllvm -optlo-O3 -optlo-std-compile-opts
 
 
 
@@ -113,9 +103,6 @@ executable FastaTool
     FastaTool.hs
   ghc-options:
     -O2 -funbox-strict-fields
-  if flag(llvm)
-    ghc-options:
-      -fllvm -optlo-O3 -optlo-std-compile-opts
 
 
 

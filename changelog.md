@@ -5,6 +5,7 @@
 - small number of conduit functions for different chunk types
 - quickcheck and unit tests
 - travis-ci integration
+- included stack.yaml (and working build)
 
 0.0.1.0
 -------
