@@ -1,12 +1,21 @@
 
 module Biobase.Fasta.Types where
 
-import GHC.Generics
-import Data.Data
-import Data.ByteString.Char8 (ByteString)
 import Control.DeepSeq
+import Control.Lens
+import Data.ByteString.Char8 (ByteString)
+import Data.Data
+import GHC.Generics
 
 
+
+-- |
+
+data FHD = FH ByteString | FD ByteString
+
+newtype RawFastaEntry = RawFastaEntry { _rawFastaEntry ∷ ByteString }
+  deriving (Show,Eq,Ord,Data,Typeable,Generic)
+makeLenses ''RawFastaEntry
 
 -- | 'StreamEvent's are chunked pieces of data, where the raw data is
 -- a strict @ByteString@. Each element also retains information on the
