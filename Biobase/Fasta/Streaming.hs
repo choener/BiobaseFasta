@@ -7,23 +7,23 @@
 
 module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
-  , def
+--  , def
   ) where
 
 import           Data.ByteString.Streaming as BSS
 import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
-import           Data.Default.Class
+--import           Data.Default.Class
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
 import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
-import           Unsafe.Coerce
+--import           Unsafe.Coerce
 
-import           Data.ByteString.Streaming.Split
+--import           Data.ByteString.Streaming.Split
 
-import qualified Data.ByteString.Lazy.Char8 as L
+--import qualified Data.ByteString.Lazy.Char8 as L
 
 
 
