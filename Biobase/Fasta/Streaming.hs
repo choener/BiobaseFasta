@@ -7,23 +7,18 @@
 
 module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
---  , def
   ) where
 
 import           Data.ByteString.Streaming as BSS
 import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
---import           Data.Default.Class
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
 import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
---import           Unsafe.Coerce
 
---import           Data.ByteString.Streaming.Split
-
---import qualified Data.ByteString.Lazy.Char8 as L
+import           Biobase.Types.Index.Type
 
 
 
@@ -37,7 +32,9 @@ newtype Header = Header BS.ByteString
 
 newtype Overlap = Overlap BS.ByteString
 
-newtype Current = Current BS.ByteString
+-- | Current Fasta window, together with the start index (0-based).
+
+data Current = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 0 }
 
 -- | Fully stream a fasta file, making sure to never exceed a constant amount
 -- of memory. The @go@ function yields values of type @a@ down the line for
@@ -97,15 +94,16 @@ overlappedFasta
   → Stream (Of a) m r
   -- ^ Stream of @a@s being produced.
 {-# Inlinable overlappedFasta #-}
-overlappedFasta (OverlapSize oSz) (CurrentSize cSz) f header = go BS.empty where
-  go ∷ BS.ByteString → ByteString m r → Stream (Of a) m r
-  go _ (Empty r) = return r
-  go overlap s = effect $ do
+overlappedFasta (OverlapSize oSz) (CurrentSize cSz) f header = go BS.empty (index 0) where
+  go ∷ BS.ByteString → Index 0 → ByteString m r → Stream (Of a) m r
+  go _ _ (Empty r) = return r
+  go overlap idx s = effect $ do
     current :> rest ← S8.toStrict $ S8.splitAt (fromIntegral cSz) s
     let l = BS.length current - oSz
     return $ if BS.null current
-      then go current rest
-      else f header (Overlap overlap) (Current current) >> go (BS.drop l current) rest
+      then go current idx rest
+      else f header (Overlap overlap) (Current current idx)
+           >> go (BS.drop l current) (Index $ getIndex idx + BS.length current) rest
 
 -- | Handle a streaming Fasta entry. Collapse a Fasta entry based on a stream
 -- of lines into the header (with @HeaderSize@), and a single @ByteString m r@.
