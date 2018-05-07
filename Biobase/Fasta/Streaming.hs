@@ -24,18 +24,24 @@ import           Biobase.Types.Index.Type
 
 
 newtype HeaderSize = HeaderSize Int
+  deriving (Eq,Ord,Show)
 
 newtype OverlapSize = OverlapSize Int
+  deriving (Eq,Ord,Show)
 
 newtype CurrentSize = CurrentSize Int
+  deriving (Eq,Ord,Show)
 
-newtype Header (which ∷ k) = Header BS.ByteString
+newtype Header (which ∷ k) = Header { getHeader ∷ BS.ByteString }
+  deriving (Eq,Ord,Show)
 
-newtype Overlap (which ∷ k) = Overlap BS.ByteString
+newtype Overlap (which ∷ k) = Overlap { getOverlap ∷ BS.ByteString }
+  deriving (Eq,Ord,Show)
 
 -- | Current Fasta window, together with the start index (0-based).
 
 data Current (which ∷ k) = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 0 }
+  deriving (Eq,Ord,Show)
 
 -- | Fully stream a fasta file, making sure to never exceed a constant amount
 -- of memory. The @go@ function yields values of type @a@ down the line for
