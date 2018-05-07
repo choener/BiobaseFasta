@@ -63,6 +63,7 @@ library
                     , LambdaCase
                     , MultiWayIf
                     , NoMonomorphismRestriction
+                    , PolyKinds
                     , RankNTypes
                     , RecordWildCards
                     , ScopedTypeVariables

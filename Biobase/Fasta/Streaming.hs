@@ -9,6 +9,7 @@ module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
   ) where
 
+import           GHC.TypeLits
 import           Data.ByteString.Streaming as BSS
 import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
@@ -28,13 +29,13 @@ newtype OverlapSize = OverlapSize Int
 
 newtype CurrentSize = CurrentSize Int
 
-newtype Header = Header BS.ByteString
+newtype Header (which ∷ k) = Header BS.ByteString
 
-newtype Overlap = Overlap BS.ByteString
+newtype Overlap (which ∷ k) = Overlap BS.ByteString
 
 -- | Current Fasta window, together with the start index (0-based).
 
-data Current = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 0 }
+data Current (which ∷ k) = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 0 }
 
 -- | Fully stream a fasta file, making sure to never exceed a constant amount
 -- of memory. The @go@ function yields values of type @a@ down the line for
@@ -46,7 +47,7 @@ data Current = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 
 -- @
 
 streamingFasta
-  ∷ forall m r a
+  ∷ forall m w r a
   . ( Monad m )
   ⇒ HeaderSize
   -- ^ Maximal length of the header. Ok to set to @20 000@, only guards against
@@ -57,7 +58,7 @@ streamingFasta
   -- todo at 'overlappedFasta')
   → CurrentSize
   -- ^ The size of each window to be processed.
-  → (Header → Overlap → Current → Stream (Of a) m ())
+  → (Header w → Overlap w → Current w → Stream (Of a) m ())
   -- ^ The processing function. Takes in the header, any overlap from the
   -- previous window, the current window and produces a stream of @a@s.
   → ByteString m r
@@ -78,16 +79,16 @@ streamingFasta hSz oSz cSz f
 -- but is this in any way useful?
 
 overlappedFasta
-  ∷ forall m r a
+  ∷ forall m w r a
   . ( Monad m )
   ⇒ OverlapSize
   -- ^ Size of the overlap carried over from the previous window.
   → CurrentSize
   -- ^ Size of the current window.
-  → (Header → Overlap → Current → Stream (Of a) m ())
+  → (Header w → Overlap w → Current w → Stream (Of a) m ())
   -- ^ Function that does the actual computation on a @Current@ window,
   -- producing a stream of @a@ values.
-  → Header
+  → Header w
   -- ^ Header of this Fasta entry.
   → ByteString m r
   -- ^ Incoming Fasta entry, without header.
@@ -111,11 +112,11 @@ overlappedFasta (OverlapSize oSz) (CurrentSize cSz) f header = go BS.empty (inde
 -- file.
 
 handleFastaEntry
-  ∷ forall m f r
+  ∷ forall m w f r
   . ( Monad m, Functor f )
   ⇒ HeaderSize
   -- ^ Transform the streamed in header into a strict bytestring.
-  → (Header → ByteString m r → Stream f m r)
+  → (Header w → ByteString m r → Stream f m r)
   -- ^ Function that does the actual computation on the full, streaming, data.
   → Stream (ByteString m) m r
   -- ^ Incoming stream of lines for a single Fasta entry.
