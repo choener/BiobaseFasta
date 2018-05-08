@@ -7,6 +7,7 @@ let
     };
   };
   sourceOverrides = packageOverrides.extend (haskell.lib.packageSourceOverrides {
+    BiobaseFasta = ./.;
     BiobaseTypes = ../Lib-BiobaseTypes;
     DPutils = ../Lib-DPutils;
     ForestStructures = ../Lib-ForestStructures;

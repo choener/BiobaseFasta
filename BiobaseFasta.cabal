@@ -39,19 +39,12 @@ extra-source-files:
 library
   build-depends: base                 >= 4.7    && < 5.0
                , bytestring
---               , containers
---               , data-default-class   >= 0.1
---               , deepseq              >= 1.4
---               , lens                 >= 4.0
                , streaming            >= 0.1
                , streaming-bytestring >= 0.1
                --
                , BiobaseTypes         == 0.1.3.*
---               , DPutils              == 0.0.2.*
   exposed-modules:
---    Biobase.Fasta
     Biobase.Fasta.Streaming
---    Biobase.Fasta.Types
   default-language:
     Haskell2010
   default-extensions: BangPatterns
@@ -89,12 +82,18 @@ test-suite properties
   default-extensions: TemplateHaskell
                     , UnicodeSyntax
   build-depends: base
---               , HUnit                        >= 1.2
                , QuickCheck
---               , test-framework               >= 0.8
---               , test-framework-hunit         >= 0.3
---               , test-framework-quickcheck2   >= 0.3
---               , test-framework-th            >= 0.2
+               , bytestring
+               , filepath
+               , resourcet              >= 1.0
+               , streaming              >= 0.1
+               , streaming-bytestring   >= 0.1
+               , tasty                  >= 0.11
+               , tasty-golden           >= 2.3
+               , tasty-quickcheck       >= 0.8
+               , tasty-silver           >= 3.1.9
+               , tasty-th               >= 0.1
+               , text
                --
                , BiobaseFasta
 
