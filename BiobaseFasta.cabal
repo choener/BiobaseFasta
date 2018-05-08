@@ -39,6 +39,7 @@ extra-source-files:
 library
   build-depends: base                 >= 4.7    && < 5.0
                , bytestring
+               , resourcet            >= 1.0
                , streaming            >= 0.1
                , streaming-bytestring >= 0.1
                --

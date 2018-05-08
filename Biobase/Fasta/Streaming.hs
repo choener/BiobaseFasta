@@ -18,6 +18,8 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
+import           Debug.Trace
+import           Control.Monad.Trans.Resource (runResourceT, ResourceT(..), MonadResource)
 
 import           Biobase.Types.Index.Type
 
@@ -154,6 +156,11 @@ streamFastaLines = go where
   go (SI.Return l) = SI.Return l
   go s = SI.Step $ fmap go $ splitFastaLines s
 
+data HasHeader
+  = NoHeaderYet
+  | HasHeader
+  deriving (Eq,Ord,Show)
+
 -- | Split lines of Fasta input before a new Fasta entry begins. This new entry
 -- may not begin on the first line.
 --
@@ -186,27 +193,29 @@ splitFastaLines
   -- ^ Outgoing stream of lines of one Fasta entry; with the remainder in the
   -- return value.
 {-# Inlinable splitFastaLines #-}
-splitFastaLines = go False where
-  go stopBeforeHeader (s ∷ Stream (ByteString m) m r) = SI.effect $ do
+splitFastaLines = go 1 NoHeaderYet where
+  go (k::Int) headerCheck (s ∷ Stream (ByteString m) m r) = SI.effect $ do
     -- anything more in the stream?
     SI.inspect s >>= \case
-      -- no, we can't continue the fasta entry
-      Left l → return $ SI.Return $ SI.Return l
+      -- No, we can't continue at all, provide final return value.
+      Left retVal → return . SI.Return $ SI.Return retVal
       -- yes, there is another line
-      Right r → do
+      Right rline → do
         -- next is the bytestring "return from empty"
-        mhd :> nextLine ← S8.head r
-        case mhd of
+        mhd :> nextLine ← S8.head (rline ∷ ByteString m (Stream (ByteString m) m r))
+        len :> _ ← S8.length rline
+        traceShow (k,len,mhd) $
+         case mhd of
           -- weird, line with no characters, continue on
-          Nothing → return $ go stopBeforeHeader nextLine
+          Nothing → return $ go k headerCheck nextLine
           -- one or more lines have been handled and @s@ is a line starting a
           -- new fasta entry. Hence we stop and return @s@ (and all following
           -- lines)
-          Just c | stopBeforeHeader && (c=='>' || c==';')
+          Just c | headerCheck == HasHeader && (c=='>' || c==';')
             → return $ SI.Return s
           -- continue handling this line, since it belongs to the same fasta
           -- file.
-          otherwise → return $ SI.Step $ fmap (go True) r
+          otherwise → return $ SI.Step $ fmap (go (k+1) NoHeaderYet) rline
 
 {-
 t0 = P.unlines
@@ -229,4 +238,15 @@ r3' = toList . mapped toList $ maps (mapped toStrict) r3
 r4 = toList . streamingFasta (HeaderSize 2) (OverlapSize 1) (CurrentSize 2) go . S8.fromStrict $ BS.pack t0
   where go (Header h) (Overlap o) (Current c) = yield (h,o,c)
 -}
+
+eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
+
+--readFastaFile ∷ FilePath → IO [(BS.ByteString,BS.ByteString,BS.ByteString)]
+readFastaFile f = do
+  let s = 1000000000000
+  r ← runResourceT
+          $ SP.print
+          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta
+          $ S8.readFile f
+  return ()
 
