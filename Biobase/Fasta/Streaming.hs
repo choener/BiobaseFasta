@@ -76,41 +76,94 @@ streamingFasta
   → Stream (Of a) m r
   -- ^ The outgoing stream of @a@s being processed.
 {-# Inlinable streamingFasta #-}
-streamingFasta (HeaderSize hSz) oSz (CurrentSize cSz) f = go (FindHeader [] 0) where
+streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (FindHeader [] 0) where
+  -- Find the next FASTA header
   go (FindHeader hdr cnt) = \case
+    -- No more data to be had. If There is some part of a header, we will run
+    -- the handling function @f@ with empty input. @f@ can decide on how to
+    -- handle empty FASTA entries.
     Empty retVal → do
-      unless (P.null hdr) $ return () -- TODO handle last *EMPTY* fasta? (only if there is no content will this happen)
-      SI.Return retVal -- return $ error "Empty retval"
+      -- handle case of last empty fasta
+      unless (P.null hdr) $ do
+        let thisHeader = BS.take hSz $ BS.concat $ P.reverse hdr
+        f (Header thisHeader) (Overlap BS.empty) (Current BS.empty 0)
+      SI.Return retVal
+    -- Effects are wrapped up into a 'Stream' effect.
     Go m → SI.Effect $ liftM (go (FindHeader hdr cnt)) m
-    Chunk b bs
+    -- We have a chunk of bytestring @rawBS@ with more data in the bytestream
+    -- @bs@. We work on @b@, not the @rawBS@. In case we have no header parts
+    -- yet, all characters preceeding a fasta header symbol ('>' or ';') are
+    -- dropped.
+    Chunk rawBS bytestream
+      -- No newline in the @b@, hence we add the bytestring to the partial
+      -- header, and continue scanning. Note that we add only if we are below
+      -- the maximal header size @hSz@ to prevent malicious fasta files from
+      -- blowing up memory usage.
       | Nothing ← mk → if cnt > hSz
-                        then go (FindHeader hdr cnt) bs
-                        else go (FindHeader (b':hdr) (BS.length b' + cnt)) bs
-      | Just k  ← mk → go (HasHeader (BS.take hSz $ BS.concat $ P.reverse $ BS.take k b':hdr) [] 0)
-                          (Chunk (BS.drop (k+1) b') bs)
-      where b' = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') b else b
-            mk = BS.elemIndex '\n' b'
-  go (HasHeader hdr cs cnt) = \case
+                        then go (FindHeader hdr cnt) bytestream
+                        else go (FindHeader (b:hdr) (BS.length b + cnt)) bytestream
+      -- We have found a newline at @k@. Prepare the full header (up to @hSz@
+      -- size) and hand over to @HasHeader@ which processes actual fasta
+      -- payload.
+      | Just k  ← mk → let thisHeader = BS.take hSz $ BS.concat $ P.reverse $ BS.take k b:hdr
+                       in  go (HasHeader thisHeader BS.empty [] 0)
+                              (Chunk (BS.drop (k+1) b) bytestream)
+      where b = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') rawBS else rawBS
+            mk = BS.elemIndex '\n' b
+  -- We actually do have a valid header now and process fasta in parts.
+  go hasHeader@(HasHeader hdr overlap cs cnt) = \case
+    -- No more data, process final input and return.
     Empty retVal → do
       f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
       SI.Return retVal
-    Go m → SI.Effect $ liftM (go (HasHeader hdr cs cnt)) m
-    Chunk b bs → case newFastaIndex b of
+    -- Effects to be dealt with.
+    Go m → SI.Effect $ liftM (go hasHeader) m
+    -- We have incoming data ...
+    Chunk b bytestream → case newFastaIndex b of
+      -- there is no new fasta starting, meaning that we need to process @b@ as
+      -- payload. We split at the maximal size we are allowed according to
+      -- @cSz@. If we have hit the limit, we run @f@ on this part of the data
+      -- and include the overlap as prefix. Otherwise we continue gathering.
+      -- Any newlines are removed from the data.
       Nothing → let (this,next) = BS.splitAt (cSz-cnt) $ BS.filter (/= '\n') b
                 in  if BS.length this + cnt >= cSz
-                    then do f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
-                            go (HasHeader hdr [] 0) $ Chunk next bs
-                    else go (HasHeader hdr (this:cs) (BS.length this + cnt)) (if BS.null next then bs else Chunk next bs)
+                    then do let thisFasta = BS.concat $ reverse cs
+                            f (Header hdr) (Overlap overlap) (Current (overlap `BS.append` thisFasta) 0)
+                            go (HasHeader hdr (BS.drop (BS.length thisFasta - oSz) thisFasta) [] 0) $ Chunk next bytestream
+                    else go (HasHeader hdr overlap (this:cs) (BS.length this + cnt))
+                            (if BS.null next then bytestream else Chunk next bytestream)
+      -- We have a new fasta symbol in @b@. We split at the symbol and re-run
+      -- the first part (which will end up being the @Nothing@ case) and put
+      -- into @Chunk next bytestream@ the beginning of the next fasta entry.
+      -- This part will then be handled by the @otherwise@ case here.
       Just new
         | new > 0 → let (this,next) = BS.splitAt new b
-                    in  go (HasHeader hdr cs cnt) $ Chunk this (Chunk next bs)
-        | otherwise → do f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
-                         go (FindHeader [] 0) $ Chunk b bs
+                    in  go (HasHeader hdr overlap cs cnt) $ Chunk this (Chunk next bytestream)
+        | otherwise → do let thisFasta = BS.concat $ reverse cs
+                         f (Header hdr) (Overlap BS.empty) (Current (overlap `BS.append` thisFasta) 0)
+                         go (FindHeader [] 0) $ Chunk b bytestream
+  -- Returns the first index (if any) of a new fasta entry symbol.
   newFastaIndex b = getMin <$> (Min <$> BS.elemIndex '>' b) SG.<> (Min <$> BS.elemIndex ';' b)
 
+-- | Control structure for 'streamingFasta'.
+
 data FindHeader
-  = FindHeader [BS.ByteString] Int
-  | HasHeader  BS.ByteString [BS.ByteString] Int
+  = FindHeader
+      { headerParts ∷ [BS.ByteString]
+      -- ^ the collected header parts (in reverse order)
+      , headerLength ∷ !Int
+      -- ^ accumulated header length
+      }
+  | HasHeader
+      { header ∷ !BS.ByteString
+      -- ^ the (size-truncated) header for this fasta file
+      , dataOverlap ∷ !BS.ByteString
+      -- ^ overlap (if any) from earlier parts of the fasta file
+      , dataParts ∷ [BS.ByteString]
+      -- ^ collection of dataParts, in reverse order!
+      , dataLength ∷ !Int
+      -- ^ total length of data parts, simplifies checking if enough data was collected
+      }
 
 {-
 streamingFasta hSz oSz cSz f
