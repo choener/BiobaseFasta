@@ -60,6 +60,6 @@ goldenTests = do
 main :: IO ()
 main = do
 --  $(defaultMainGenerator)
---  defaultMain =<< goldenTests
+  defaultMain =<< goldenTests
   return ()
 

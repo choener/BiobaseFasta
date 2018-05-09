@@ -52,6 +52,7 @@ library
                     , DataKinds
                     , DeriveDataTypeable
                     , DeriveGeneric
+                    , FlexibleContexts
                     , GADTs
                     , KindSignatures
                     , LambdaCase

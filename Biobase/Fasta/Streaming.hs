@@ -9,17 +9,19 @@ module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
   ) where
 
-import           GHC.TypeLits
+import           Control.Monad
+import           Control.Monad.Trans.Resource (runResourceT, ResourceT(..), MonadResource)
 import           Data.ByteString.Streaming as BSS
 import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
+import           Data.Semigroup as SG
+import           Debug.Trace
+import           GHC.TypeLits
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
 import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
-import           Debug.Trace
-import           Control.Monad.Trans.Resource (runResourceT, ResourceT(..), MonadResource)
 
 import           Biobase.Types.Index.Type
 
@@ -74,6 +76,43 @@ streamingFasta
   → Stream (Of a) m r
   -- ^ The outgoing stream of @a@s being processed.
 {-# Inlinable streamingFasta #-}
+streamingFasta (HeaderSize hSz) oSz (CurrentSize cSz) f = go (FindHeader [] 0) where
+  go (FindHeader hdr cnt) = \case
+    Empty retVal → do
+      unless (P.null hdr) $ return () -- TODO handle last *EMPTY* fasta? (only if there is no content will this happen)
+      SI.Return retVal -- return $ error "Empty retval"
+    Go m → SI.Effect $ liftM (go (FindHeader hdr cnt)) m
+    Chunk b bs
+      | Nothing ← mk → if cnt > hSz
+                        then go (FindHeader hdr cnt) bs
+                        else go (FindHeader (b':hdr) (BS.length b' + cnt)) bs
+      | Just k  ← mk → go (HasHeader (BS.take hSz $ BS.concat $ P.reverse $ BS.take k b':hdr) [] 0)
+                          (Chunk (BS.drop (k+1) b') bs)
+      where b' = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') b else b
+            mk = BS.elemIndex '\n' b'
+  go (HasHeader hdr cs cnt) = \case
+    Empty retVal → do
+      f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
+      SI.Return retVal
+    Go m → SI.Effect $ liftM (go (HasHeader hdr cs cnt)) m
+    Chunk b bs → case newFastaIndex b of
+      Nothing → let (this,next) = BS.splitAt (cSz-cnt) $ BS.filter (/= '\n') b
+                in  if BS.length this + cnt >= cSz
+                    then do f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
+                            go (HasHeader hdr [] 0) $ Chunk next bs
+                    else go (HasHeader hdr (this:cs) (BS.length this + cnt)) (if BS.null next then bs else Chunk next bs)
+      Just new
+        | new > 0 → let (this,next) = BS.splitAt new b
+                    in  go (HasHeader hdr cs cnt) $ Chunk this (Chunk next bs)
+        | otherwise → do f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
+                         go (FindHeader [] 0) $ Chunk b bs
+  newFastaIndex b = getMin <$> (Min <$> BS.elemIndex '>' b) SG.<> (Min <$> BS.elemIndex ';' b)
+
+data FindHeader
+  = FindHeader [BS.ByteString] Int
+  | HasHeader  BS.ByteString [BS.ByteString] Int
+
+{-
 streamingFasta hSz oSz cSz f
   = concats
   . maps (handleFastaEntry hSz (overlappedFasta oSz cSz f))
@@ -238,15 +277,19 @@ r3' = toList . mapped toList $ maps (mapped toStrict) r3
 r4 = toList . streamingFasta (HeaderSize 2) (OverlapSize 1) (CurrentSize 2) go . S8.fromStrict $ BS.pack t0
   where go (Header h) (Overlap o) (Current c) = yield (h,o,c)
 -}
+-}
 
-eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
+{-
+--eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
+eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (BS.length h, BS.length o, BS.length c)
 
 --readFastaFile ∷ FilePath → IO [(BS.ByteString,BS.ByteString,BS.ByteString)]
 readFastaFile f = do
   let s = 1000000000000
   r ← runResourceT
-          $ SP.print
+          $ SP.mapM_ (liftIO . P.print)
           $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta
           $ S8.readFile f
-  return ()
+  return r
+-}
 
