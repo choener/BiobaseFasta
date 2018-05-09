@@ -83,6 +83,7 @@ test-suite properties
     Haskell2010
   default-extensions: TemplateHaskell
                     , UnicodeSyntax
+                    , OverloadedStrings
   build-depends: base
                , QuickCheck
                , bytestring
@@ -91,6 +92,7 @@ test-suite properties
                , streaming              >= 0.1
                , streaming-bytestring   >= 0.1
                , tasty                  >= 0.11
+               , tasty-hunit            >= 0.10
                , tasty-golden           >= 2.3
                , tasty-quickcheck       >= 0.8
                , tasty-silver           >= 3.1.9

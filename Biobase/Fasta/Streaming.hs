@@ -106,15 +106,15 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- size) and hand over to @HasHeader@ which processes actual fasta
       -- payload.
       | Just k  ← mk → let thisHeader = BS.take hSz $ BS.concat $ P.reverse $ BS.take k b:hdr
-                       in  go (HasHeader thisHeader BS.empty [] 0)
+                       in  go (HasHeader thisHeader BS.empty [] 0 0)
                               (Chunk (BS.drop (k+1) b) bytestream)
       where b = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') rawBS else rawBS
             mk = BS.elemIndex '\n' b
   -- We actually do have a valid header now and process fasta in parts.
-  go hasHeader@(HasHeader hdr overlap cs cnt) = \case
+  go hasHeader@(HasHeader hdr overlap cs cnt entries) = \case
     -- No more data, process final input and return.
     Empty retVal → do
-      f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
+      when (cnt>0 || entries==0) $ f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
       SI.Return retVal
     -- Effects to be dealt with.
     Go m → SI.Effect $ liftM (go hasHeader) m
@@ -127,10 +127,11 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- Any newlines are removed from the data.
       Nothing → let (this,next) = BS.splitAt (cSz-cnt) $ BS.filter (/= '\n') b
                 in  if BS.length this + cnt >= cSz
-                    then do let thisFasta = BS.concat $ reverse cs
-                            f (Header hdr) (Overlap overlap) (Current (overlap `BS.append` thisFasta) 0)
-                            go (HasHeader hdr (BS.drop (BS.length thisFasta - oSz) thisFasta) [] 0) $ Chunk next bytestream
-                    else go (HasHeader hdr overlap (this:cs) (BS.length this + cnt))
+                    then do let thisFasta = BS.concat $ reverse $ this:cs
+                            f (Header hdr) (Overlap overlap) (Current thisFasta 0)
+                            go (HasHeader hdr (BS.drop (BS.length thisFasta - oSz) thisFasta) [] 0 (entries+1))
+                               (if BS.null next then bytestream else Chunk next bytestream)
+                    else go (HasHeader hdr overlap (this:cs) (BS.length this + cnt) entries)
                             (if BS.null next then bytestream else Chunk next bytestream)
       -- We have a new fasta symbol in @b@. We split at the symbol and re-run
       -- the first part (which will end up being the @Nothing@ case) and put
@@ -138,9 +139,11 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- This part will then be handled by the @otherwise@ case here.
       Just new
         | new > 0 → let (this,next) = BS.splitAt new b
-                    in  go (HasHeader hdr overlap cs cnt) $ Chunk this (Chunk next bytestream)
+                    in  go (HasHeader hdr overlap cs cnt entries) $ Chunk this (Chunk next bytestream)
         | otherwise → do let thisFasta = BS.concat $ reverse cs
-                         f (Header hdr) (Overlap BS.empty) (Current (overlap `BS.append` thisFasta) 0)
+                         -- we only emit on empty @thisFasta@, if there is
+                         -- data, or it is the only (then empty) entry.
+                         when (cnt>0 || entries==0) $ f (Header hdr) (Overlap overlap) (Current thisFasta 0)
                          go (FindHeader [] 0) $ Chunk b bytestream
   -- Returns the first index (if any) of a new fasta entry symbol.
   newFastaIndex b = getMin <$> (Min <$> BS.elemIndex '>' b) SG.<> (Min <$> BS.elemIndex ';' b)
@@ -163,6 +166,8 @@ data FindHeader
       -- ^ collection of dataParts, in reverse order!
       , dataLength ∷ !Int
       -- ^ total length of data parts, simplifies checking if enough data was collected
+      , entries ∷ !Int
+      -- ^ count how many entries we have seen
       }
 
 
