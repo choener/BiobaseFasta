@@ -16,17 +16,14 @@ import Control.Monad.IO.Class (liftIO, MonadIO (..))
 import Control.Monad (unless)
 import Data.ByteString (ByteString, breakByte, takeWhile, empty, null, uncons)
 import Data.Char
-import Data.Conduit as C
+import Data.Conduit
+import qualified Data.Conduit.Internal as CI
 import Data.Conduit.Binary as C
 import Data.Conduit.List as CL
 import Prelude as P hiding (null)
-import qualified Data.ByteString as B
+import Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
-import Bio.Core.Sequence (Offset(..))
-
-import Biobase.Fasta
-
-
+import Biobase.Fasta.Types
 
 -- | Parse from 'ByteString' into 'FastaWindow's with a past.
 
@@ -62,7 +59,7 @@ isHeader _ = False
 
 -- | Parse from 'ByteString' into 'Event's.
 
-parseEvents :: Monad m => Int -> GInfConduit ByteString m Event
+--parseEvents :: Monad m => Int -> CI.GInfConduit ByteString m Event
 parseEvents wsize = awaitE >>= either return goU where
   loopU         = awaitE >>= either finishU           goU
   loopH front   = awaitE >>= either (finishH   front) (goH front)

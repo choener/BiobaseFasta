@@ -35,6 +35,7 @@ import Text.Printf
 
 import Biobase.Fasta
 import Biobase.Fasta.Import
+import Biobase.Fasta.Types
 
 
 
