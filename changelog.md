@@ -1,3 +1,8 @@
+0.2.0.0
+-------
+
+- this version now uses the streaming library
+
 0.1.0.0
 -------
 
