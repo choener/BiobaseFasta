@@ -1,11 +1,11 @@
 
 module Biobase.Fasta
   ( module Biobase.Fasta.Types
-  , module Biobase.Fasta.Conduit
+  , module Biobase.Fasta.Streaming
   ) where
 
 
 
 import Biobase.Fasta.Types
-import Biobase.Fasta.Conduit
+import Biobase.Fasta.Streaming
 
