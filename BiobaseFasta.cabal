@@ -11,6 +11,7 @@ license-file:   LICENSE
 build-type:     Simple
 stability:      experimental
 cabal-version:  >= 1.10.0
+tested-with:    GHC == 8.4.3
 synopsis:       streaming FASTA parser
 description:
                 Stream-based handling of FASTA files. The user selects a window
