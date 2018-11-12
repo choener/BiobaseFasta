@@ -6,12 +6,15 @@ import Control.Lens
 import Data.ByteString.Char8 (ByteString)
 import Data.Data
 import GHC.Generics
+import Biobase.Types.Sequence
+import Biobase.Types.AminoAcidSequence
 
+-- | 
 
+data Fasta = Fasta { fastaHeader :: SeqData, fastaSequence :: BioSeq}
+  deriving (Show,Eq,Ord,Data,Typeable,Generic)
 
--- |
-
-data FHD = FH ByteString | FD ByteString
+newtype BioSeq = DNAseq | RNAseq | AAseq
 
 newtype RawFastaEntry = RawFastaEntry { _rawFastaEntry ∷ ByteString }
   deriving (Show,Eq,Ord,Data,Typeable,Generic)
