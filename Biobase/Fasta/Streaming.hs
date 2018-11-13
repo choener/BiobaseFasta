@@ -106,7 +106,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- size) and hand over to @HasHeader@ which processes actual fasta
       -- payload.
       | Just k  ← mk → let thisHeader = BS.take hSz $ BS.concat $ P.reverse $ BS.take k b:hdr
-                       in  go (HasHeader (BS.drop 1 thisHeader) BS.empty [] 0 0)
+                       in  go (HasHeader thisHeader BS.empty [] 0 0)
                               (Chunk (BS.drop (k+1) b) bytestream)
       where b = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') rawBS else rawBS
             mk = BS.elemIndex '\n' b

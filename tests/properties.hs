@@ -28,8 +28,6 @@ import           Biobase.Fasta.Streaming
 
 -- * golden tests
 
-eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
-
 readFastaFile ∷ FilePath → IO [(BS.ByteString,BS.ByteString,BS.ByteString)]
 readFastaFile f = do
   let s = 1000000
