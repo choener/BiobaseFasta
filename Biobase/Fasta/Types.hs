@@ -1,24 +1,25 @@
+{-# Language DeriveGeneric #-}
 
 module Biobase.Fasta.Types where
 
 import Control.DeepSeq
 import Control.Lens
 import Data.ByteString.Char8 (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as B
 import Data.Data
 import GHC.Generics
-import Biobase.Types.Sequence
+import Biobase.Types.NucleotideSequence
 import Biobase.Types.AminoAcidSequence
 
--- | 
+-- |
 
-data Fasta = Fasta { fastaHeader :: SeqData, fastaSequence :: BioSeq}
-  deriving (Show,Eq,Ord,Data,Typeable,Generic)
+data Fasta = Fasta { fastaHeader :: B.ByteString, fastaSequence :: B.ByteString }
+  deriving (Eq)
 
-newtype BioSeq = DNAseq | RNAseq | AAseq
+newtype RawFastaEntry = RawFastaEntry { _rawFastaEntry :: ByteString }
+  deriving (Show,Eq,Ord,Typeable)
 
-newtype RawFastaEntry = RawFastaEntry { _rawFastaEntry ∷ ByteString }
-  deriving (Show,Eq,Ord,Data,Typeable,Generic)
-makeLenses ''RawFastaEntry
+--makeLenses ''RawFastaEntry
 
 -- | 'StreamEvent's are chunked pieces of data, where the raw data is
 -- a strict @ByteString@. Each element also retains information on the
@@ -32,7 +33,7 @@ data StreamEvent
   -- | A data event. We keep a pointer to the previous chunk (which is
   -- useful for some algorithms). The chunk is free of newlines!
   | StreamFasta   { streamFasta   :: !ByteString, prevStreamFasta :: !ByteString, streamLines :: !LineInfo, streamHeader :: !ByteString }
-  deriving (Show,Eq,Ord,Data,Typeable,Generic)
+  deriving (Show,Eq,Ord,Typeable,Generic)
 
 instance NFData StreamEvent
 
@@ -49,7 +50,7 @@ data LineInfo = LineInfo
   , lastCol     :: !Int   -- ^ last column in last line for this chunk
   , firstIndex  :: !Int   -- ^ first index in this fasta block. Counts just the number of symbols in the @Fasta@ payload.
   }
-  deriving (Show,Eq,Ord,Data,Typeable,Generic)
+  deriving (Show,Eq,Ord,Typeable,Generic)
 
 instance NFData LineInfo
 

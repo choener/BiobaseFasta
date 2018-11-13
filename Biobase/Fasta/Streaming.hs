@@ -1,4 +1,3 @@
-
 -- | Streaming Fasta handling via the @streaming@ library.
 --
 -- The functions in here should be streaming in constant memory.
@@ -19,12 +18,13 @@ import           Debug.Trace
 import           GHC.TypeLits
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
-
+import qualified Data.List as L
 import           Biobase.Types.Index.Type
-
+import           Biobase.Fasta.Types
 
 
 newtype HeaderSize = HeaderSize Int
@@ -106,7 +106,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- size) and hand over to @HasHeader@ which processes actual fasta
       -- payload.
       | Just k  ← mk → let thisHeader = BS.take hSz $ BS.concat $ P.reverse $ BS.take k b:hdr
-                       in  go (HasHeader thisHeader BS.empty [] 0 0)
+                       in  go (HasHeader (BS.drop 1 thisHeader) BS.empty [] 0 0)
                               (Chunk (BS.drop (k+1) b) bytestream)
       where b = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') rawBS else rawBS
             mk = BS.elemIndex '\n' b
@@ -193,17 +193,28 @@ r4 = toList . streamingFasta (HeaderSize 2) (OverlapSize 1) (CurrentSize 2) go .
   where go (Header h) (Overlap o) (Current c) = yield (h,o,c)
 -}
 
-{-
---eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
-eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (BS.length h, BS.length o, BS.length c)
+--eachFasta :: forall (m0 :: * -> *).  Header Int -> Overlap Int -> Current Int -> Stream (Of (BS.ByteString, BS.ByteString, BS.ByteString)) (ResourceT IO) ()
+eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
 
---readFastaFile ∷ FilePath → IO [(BS.ByteString,BS.ByteString,BS.ByteString)]
-readFastaFile f = do
+--readFastaFile ∷ FilePath → IO () -- [(BS.ByteString,BS.ByteString,BS.ByteString)]
+--readFastaFile f = do
+--  let s = 1000000000000
+--  r ← runResourceT
+--          $ SP.mapM_ (liftIO . P.print)
+--          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta 
+--          $ S8.readFile f
+--  return r
+
+parseFastaFile ∷ FilePath → IO [Fasta]
+parseFastaFile f = do
   let s = 1000000000000
   r ← runResourceT
-          $ SP.mapM_ (liftIO . P.print)
-          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta
+          $ toList_
+          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta 
           $ S8.readFile f
-  return r
--}
+  let fastas = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) r
+  return fastas
+
+
+
 

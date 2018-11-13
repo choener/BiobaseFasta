@@ -43,10 +43,14 @@ library
                , resourcet            >= 1.0
                , streaming            >= 0.1
                , streaming-bytestring >= 0.1
+               , lens
+               , deepseq
                --
                , BiobaseTypes         == 0.1.3.*
   exposed-modules:
-    Biobase.Fasta.Streaming
+    Biobase.Fasta.Streaming,
+    Biobase.Fasta.Types,
+    Biobase.Fasta.Export
   default-language:
     Haskell2010
   default-extensions: BangPatterns
@@ -85,6 +89,7 @@ test-suite properties
   default-extensions: TemplateHaskell
                     , UnicodeSyntax
                     , OverloadedStrings
+		    
   build-depends: base
                , QuickCheck
                , bytestring
