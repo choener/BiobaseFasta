@@ -1,6 +1,6 @@
 name:           BiobaseFasta
 version:        0.2.0.0
-author:         Christian Hoener zu Siederdissen
+author:         Christian Hoener zu Siederdissen, Florian Eggenhofer
 maintainer:     choener@bioinf.uni-leipzig.de
 homepage:       https://github.com/choener/BiobaseFasta
 bug-reports:    https://github.com/choener/BiobaseFasta/issues
