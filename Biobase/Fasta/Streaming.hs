@@ -201,7 +201,7 @@ eachFasta (Header h) (Overlap o) (Current c p) = SP.yield (h,o,c)
 --  let s = 1000000000000
 --  r ← runResourceT
 --          $ SP.mapM_ (liftIO . P.print)
---          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta 
+--          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta
 --          $ S8.readFile f
 --  return r
 
@@ -210,11 +210,12 @@ parseFastaFile f = do
   let s = 1000000000000
   r ← runResourceT
           $ toList_
-          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta 
+          $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta
           $ S8.readFile f
   let fastas = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) r
   return fastas
 
-
-
-
+--parseFasta ∷ B.ByteString → [Fasta]
+parseFasta input = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) r
+    where s = 1000000000000
+          r = toList_ $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta $ input
