@@ -4,6 +4,13 @@
 --
 -- TODO Check if this is actually true with some unit tests.
 
+{-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE DataKinds #-}
+
+
 module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
   ) where
@@ -215,7 +222,7 @@ parseFastaFile f = do
   let fastas = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) r
   return fastas
 
---parseFasta ∷ B.ByteString → [Fasta]
-parseFasta input = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) r
+parseFasta ∷ B.ByteString → [Fasta]
+parseFasta input = L.map (\(a,_,c) -> Fasta (B.fromStrict a) (B.fromStrict c)) (L.head r)
     where s = 1000000000000
-          r = toList_ $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta $ input
+          r = toList_ $ streamingFasta (HeaderSize s) (OverlapSize 0) (CurrentSize s) eachFasta $ BSS.fromLazy input
