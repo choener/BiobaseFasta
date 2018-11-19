@@ -31,8 +31,8 @@ breakByteString number bs
 fromIntToInt64 :: Int -> Int64
 fromIntToInt64 = fromIntegral
 
-writeFasta :: FilePath -> [Fasta] -> IO ()
-writeFasta filePath fastas = do
+writeFastaFile :: FilePath -> [Fasta] -> IO ()
+writeFastaFile filePath fastas = do
   let fastabs = map (prettyByteStringFasta 80) fastas
   let outputbs= B.concat fastabs
   B.writeFile filePath outputbs
