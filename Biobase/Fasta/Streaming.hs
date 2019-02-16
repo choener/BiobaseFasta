@@ -9,6 +9,7 @@ module Biobase.Fasta.Streaming
   ( module Biobase.Fasta.Streaming
   ) where
 
+import           Control.Lens hiding (Index,Empty, mapped)
 import           Control.Monad
 import           Control.Monad.Trans.Resource (runResourceT, ResourceT(..), MonadResource)
 import           Data.ByteString.Streaming as BSS
@@ -16,6 +17,7 @@ import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
 import           Data.Semigroup as SG
 import           Debug.Trace
+import           GHC.Generics
 import           GHC.TypeLits
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
@@ -23,7 +25,9 @@ import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
 
+import           Biobase.Types.BioSequence
 import           Biobase.Types.Index.Type
+import           Biobase.Types.Strand
 
 
 
@@ -36,16 +40,15 @@ newtype OverlapSize = OverlapSize Int
 newtype CurrentSize = CurrentSize Int
   deriving (Eq,Ord,Show)
 
-newtype Header (which ∷ k) = Header { getHeader ∷ BS.ByteString }
-  deriving (Eq,Ord,Show)
+-- | lens into the unique id / first word of the header.
 
-newtype Overlap (which ∷ k) = Overlap { getOverlap ∷ BS.ByteString }
-  deriving (Eq,Ord,Show)
+fastaUid ∷ Lens' (SequenceIdentifier w) BS.ByteString
+fastaUid = lens getWord updateWord
+  where getWord ((BS.words . _sequenceIdentifier) → ws) = case ws of (x:_) → BS.drop 1 x; [] → BS.empty
+        updateWord (SequenceIdentifier hdr) w = SequenceIdentifier . BS.unwords $ BS.cons '>' w : tail (BS.words hdr)
+{-# Inlinable fastaUid #-}
 
--- | Current Fasta window, together with the start index (0-based).
 
-data Current (which ∷ k) = Current { currentFasta ∷ BS.ByteString, currentStart ∷ Index 0 }
-  deriving (Eq,Ord,Show)
 
 -- | Fully stream a fasta file, making sure to never exceed a constant amount
 -- of memory. The @go@ function yields values of type @a@ down the line for
@@ -57,7 +60,7 @@ data Current (which ∷ k) = Current { currentFasta ∷ BS.ByteString, currentSt
 -- @
 
 streamingFasta
-  ∷ forall m w r a
+  ∷ forall m w ty k r a
   . ( Monad m )
   ⇒ HeaderSize
   -- ^ Maximal length of the header. Ok to set to @20 000@, only guards against
@@ -68,15 +71,12 @@ streamingFasta
   -- todo at 'overlappedFasta')
   → CurrentSize
   -- ^ The size of each window to be processed.
-  → (Header w → Overlap w → Current w → Stream (Of a) m ())
-  -- ^ The processing function. Takes in the header, any overlap from the
-  -- previous window, the current window and produces a stream of @a@s.
   → ByteString m r
   -- ^ A streaming bytestring of Fasta files.
-  → Stream (Of a) m r
-  -- ^ The outgoing stream of @a@s being processed.
+  → Stream (Of (BioSequenceWindow w ty k)) m r
+  -- ^ The outgoing stream of @Current@ windows being processed.
 {-# Inlinable streamingFasta #-}
-streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (FindHeader [] 0) where
+streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHeader [] 0) where
   -- Find the next FASTA header
   go (FindHeader hdr cnt) = \case
     -- No more data to be had. If There is some part of a header, we will run
@@ -86,7 +86,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       -- handle case of last empty fasta
       unless (P.null hdr) $ do
         let thisHeader = BS.take hSz $ BS.concat $ P.reverse hdr
-        f (Header thisHeader) (Overlap BS.empty) (Current BS.empty 0)
+        yield $ seqWindow thisHeader BS.empty BS.empty 0
       SI.Return retVal
     -- Effects are wrapped up into a 'Stream' effect.
     Go m → SI.Effect $ liftM (go (FindHeader hdr cnt)) m
@@ -114,7 +114,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
   go hasHeader@(HasHeader hdr overlap cs cnt entries) = \case
     -- No more data, process final input and return.
     Empty retVal → do
-      when (cnt>0 || entries==0) $ f (Header hdr) (Overlap BS.empty) (Current (BS.concat $ reverse cs) 0)
+      when (cnt>0 || entries==0) . yield $ seqWindow hdr BS.empty (BS.concat $ reverse cs) 0
       SI.Return retVal
     -- Effects to be dealt with.
     Go m → SI.Effect $ liftM (go hasHeader) m
@@ -128,7 +128,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
       Nothing → let (this,next) = BS.splitAt (cSz-cnt) $ BS.filter (/= '\n') b
                 in  if BS.length this + cnt >= cSz
                     then do let thisFasta = BS.concat $ reverse $ this:cs
-                            f (Header hdr) (Overlap overlap) (Current thisFasta 0)
+                            yield $ seqWindow hdr overlap thisFasta entries
                             go (HasHeader hdr (BS.drop (BS.length thisFasta - oSz) thisFasta) [] 0 (entries+1))
                                (if BS.null next then bytestream else Chunk next bytestream)
                     else go (HasHeader hdr overlap (this:cs) (BS.length this + cnt) entries)
@@ -143,10 +143,19 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) f = go (Find
         | otherwise → do let thisFasta = BS.concat $ reverse cs
                          -- we only emit on empty @thisFasta@, if there is
                          -- data, or it is the only (then empty) entry.
-                         when (cnt>0 || entries==0) $ f (Header hdr) (Overlap overlap) (Current thisFasta 0)
+                         when (cnt>0 || entries==0) . yield $ seqWindow hdr overlap thisFasta entries
                          go (FindHeader [] 0) $ Chunk b bytestream
   -- Returns the first index (if any) of a new fasta entry symbol.
   newFastaIndex b = getMin <$> (Min <$> BS.elemIndex '>' b) SG.<> (Min <$> BS.elemIndex ';' b)
+  -- build up a seq-window
+  seqWindow hdr pfx seq entries = BioSequenceWindow
+    { _bswIdentifier = SequenceIdentifier hdr
+    , _bswPrefix = BioSequence pfx
+    , _bswSequence = BioSequence seq
+    , _bswSuffix = BioSequence BS.empty
+    , _bswStrand = PlusStrand
+    , _bswIndex = Index $ entries * cSz
+    }
 
 -- | Control structure for 'streamingFasta'.
 
@@ -158,7 +167,7 @@ data FindHeader
       -- ^ accumulated header length
       }
   | HasHeader
-      { header ∷ !BS.ByteString
+      { fhHeader ∷ !BS.ByteString
       -- ^ the (size-truncated) header for this fasta file
       , dataOverlap ∷ !BS.ByteString
       -- ^ overlap (if any) from earlier parts of the fasta file
@@ -169,7 +178,6 @@ data FindHeader
       , entries ∷ !Int
       -- ^ count how many entries we have seen
       }
-
 
 {-
 t0 = P.unlines
@@ -182,15 +190,7 @@ t0 = P.unlines
   ]
 
 
-r2 = splitFastaLines $ S8.lines $ S8.fromStrict $ BS.pack t0
-
-r3 = streamFastaLines $ S8.lines $ S8.fromStrict $ BS.pack t0
-
--- r3' ∷ Stream (Stream (Of BS.ByteString) Identity) Identity ()
-r3' = toList . mapped toList $ maps (mapped toStrict) r3
-
-r4 = toList . streamingFasta (HeaderSize 2) (OverlapSize 1) (CurrentSize 2) go . S8.fromStrict $ BS.pack t0
-  where go (Header h) (Overlap o) (Current c) = yield (h,o,c)
+r4 = toList . streamingFasta (HeaderSize 2) (OverlapSize 1) (CurrentSize 2) . S8.fromStrict $ BS.pack t0
 -}
 
 {-

@@ -4,14 +4,14 @@ author:         Christian Hoener zu Siederdissen
 maintainer:     choener@bioinf.uni-leipzig.de
 homepage:       https://github.com/choener/BiobaseFasta
 bug-reports:    https://github.com/choener/BiobaseFasta/issues
-copyright:      Christian Hoener zu Siederdissen, 2011-2018
+copyright:      Christian Hoener zu Siederdissen, 2011-2019
 category:       Bioinformatics
 license:        GPL-3
 license-file:   LICENSE
 build-type:     Simple
 stability:      experimental
 cabal-version:  >= 1.10.0
-tested-with:    GHC == 8.4.3
+tested-with:    GHC == 8.4.4
 synopsis:       streaming FASTA parser
 description:
                 Stream-based handling of FASTA files. The user selects a window
@@ -40,11 +40,12 @@ extra-source-files:
 library
   build-depends: base                 >= 4.7    && < 5.0
                , bytestring
+               , lens                 >= 4.0
                , resourcet            >= 1.0
                , streaming            >= 0.1
                , streaming-bytestring >= 0.1
                --
-               , BiobaseTypes         == 0.1.4.*
+               , BiobaseTypes         == 0.2.0.*
   exposed-modules:
     Biobase.Fasta.Streaming
   default-language:
@@ -54,9 +55,12 @@ library
                     , DeriveDataTypeable
                     , DeriveGeneric
                     , FlexibleContexts
+                    , FlexibleInstances
                     , GADTs
+                    , GeneralizedNewtypeDeriving
                     , KindSignatures
                     , LambdaCase
+                    , MultiParamTypeClasses
                     , MultiWayIf
                     , NoMonomorphismRestriction
                     , PolyKinds
@@ -64,6 +68,7 @@ library
                     , RecordWildCards
                     , ScopedTypeVariables
                     , TemplateHaskell
+                    , TypeFamilies
                     , UnicodeSyntax
                     , ViewPatterns
   ghc-options:
