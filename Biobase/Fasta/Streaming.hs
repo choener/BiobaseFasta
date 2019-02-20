@@ -207,3 +207,13 @@ readFastaFile f = do
   return r
 -}
 
+{-
+readFastaFile f = do
+  let s = 1000000000000
+  r ← runResourceT
+          $ SP.mapM_ (liftIO . P.print)
+          $ SP.mapped S8.toStrict
+          $ S8.split '>'
+          $ S8.readFile f
+  return r
+-}
