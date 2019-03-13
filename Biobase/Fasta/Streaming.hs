@@ -85,7 +85,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
     Empty retVal → do
       -- handle case of last empty fasta
       unless (P.null hdr) $ do
-        let thisHeader = BS.take hSz $ BS.concat $ P.reverse hdr
+        let thisHeader = BS.take hSz . BS.drop 1 . BS.concat $ P.reverse hdr
         yield $ seqWindow thisHeader BS.empty BS.empty 0
       SI.Return retVal
     -- Effects are wrapped up into a 'Stream' effect.
@@ -105,7 +105,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
       -- We have found a newline at @k@. Prepare the full header (up to @hSz@
       -- size) and hand over to @HasHeader@ which processes actual fasta
       -- payload.
-      | Just k  ← mk → let thisHeader = BS.take hSz $ BS.concat $ P.reverse $ BS.take k b:hdr
+      | Just k  ← mk → let thisHeader = BS.take hSz . BS.drop 1 . BS.concat . P.reverse $ BS.take k b:hdr
                        in  go (HasHeader thisHeader BS.empty [] 0 0)
                               (Chunk (BS.drop (k+1) b) bytestream)
       where b = if P.null hdr then BS.dropWhile (\c → c/='>' && c/=';') rawBS else rawBS
