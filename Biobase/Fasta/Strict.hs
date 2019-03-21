@@ -63,10 +63,10 @@ windowedFasta = lens lr rl
         rl bsw f = set bswSequence (f^.fasta) $ set bswIdentifier (f^.header) bsw
 
 -- | A prism from a 'ByteString' to a 'Fasta'. Note that this will only be an
--- identity if the underlying fasta file is rendered with @60@ characters per
+-- identity if the underlying fasta file is rendered with @k@ characters per
 -- line.
 
-rawFasta ∷ Prism' ByteString (Fasta which ty)
+rawFasta ∷ Int → Prism' ByteString (Fasta which ty)
 {-# Inline rawFasta #-}
-rawFasta = prism (fastaToByteString 60) $ \bs → first (const bs) $ byteStringToFasta bs
+rawFasta k = prism (fastaToByteString k) $ \bs → first (const bs) $ byteStringToFasta bs
 
