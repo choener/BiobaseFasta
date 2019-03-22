@@ -33,14 +33,15 @@ data Fasta which ty = Fasta
   deriving (Eq,Ord,Read,Show,Generic)
 makeLenses ''Fasta
 
--- | Render a 'Fasta' entry to a 'ByteString'
+-- | Render a 'Fasta' entry to a 'ByteString'. Will end with a final @\n@ in
+-- any case.
 
 fastaToByteString ∷ Int → Fasta which ty → ByteString
 {-# Inlinable fastaToByteString #-}
-fastaToByteString k' Fasta{..} = BS.cons '>' (_header^._Wrapped) <> go (_fasta^._Wrapped)
+fastaToByteString k' Fasta{..} = BS.cons '>' (_header^._Wrapped) <> "\n" <> go (_fasta^._Wrapped)
   where go (BS.splitAt k → (hd,tl))
           | BS.null hd = mempty
-          | otherwise  = hd <> go tl
+          | otherwise  = hd <> "\n" <> go tl
         k = max 1 k'
 
 -- | Try to parse a 'ByteString' as a 'Fasta', failing with 'Left', succees
@@ -50,7 +51,7 @@ byteStringToFasta ∷ ByteString → Either String (Fasta which ty)
 {-# Inlinable byteStringToFasta #-}
 byteStringToFasta (BS.lines → ls)
   | null ls = Left "empty bytestring"
-  | Just (z, hdr) ← BS.uncons h, z `elem` ">;" = Right $ Fasta { _header = SequenceIdentifier hdr, _fasta = BioSequence $ BS.concat ts }
+  | Just (z, hdr) ← BS.uncons h, z `BS.elem` ">;" = Right $ Fasta { _header = SequenceIdentifier hdr, _fasta = BioSequence $ BS.concat ts }
   | otherwise = Left "no '>'/';' first character"
   where h:ts = ls
 
