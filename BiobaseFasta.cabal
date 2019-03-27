@@ -1,16 +1,16 @@
+cabal-version:  2.2
 name:           BiobaseFasta
-version:        0.2.0.0
+version:        0.3.0.0
 author:         Christian Hoener zu Siederdissen
 maintainer:     choener@bioinf.uni-leipzig.de
 homepage:       https://github.com/choener/BiobaseFasta
 bug-reports:    https://github.com/choener/BiobaseFasta/issues
 copyright:      Christian Hoener zu Siederdissen, 2011-2019
 category:       Bioinformatics
-license:        GPL-3
+license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 stability:      experimental
-cabal-version:  >= 1.10.0
 tested-with:    GHC == 8.4.4
 synopsis:       streaming FASTA parser
 description:
@@ -18,9 +18,6 @@ description:
                 size, the library then handles the window. For each window, the
                 previous (past) window is available, in case some data sits on
                 the boundary between windows.
-                .
-                FastaTool is a simple tool providing information on FASTA
-                files, and allowing to extract sequences and subsequences.
                 .
                 Greg Schwartz' <http://hackage.haskell.org/package/fasta>
                 package is a lot more complete. This one is mostly tailored to
@@ -37,7 +34,7 @@ extra-source-files:
 
 
 
-library
+common deps
   build-depends: base                 >= 4.7    && < 5.0
                , bytestring
                , lens                 >= 4.0
@@ -47,9 +44,6 @@ library
                , string-conversions   >= 0.4
                --
                , BiobaseTypes         == 0.2.0.*
-  exposed-modules:
-    Biobase.Fasta.Streaming
-    Biobase.Fasta.Strict
   default-language:
     Haskell2010
   default-extensions: BangPatterns
@@ -78,9 +72,18 @@ library
   ghc-options:
     -O2
 
+library
+  import:
+    deps
+  exposed-modules:
+    Biobase.Fasta.Streaming
+    Biobase.Fasta.Strict
+
 
 
 test-suite properties
+  import:
+    deps
   type:
     exitcode-stdio-1.0
   main-is:
@@ -89,18 +92,8 @@ test-suite properties
     -threaded -rtsopts -with-rtsopts=-N
   hs-source-dirs:
     tests
-  default-language:
-    Haskell2010
-  default-extensions: TemplateHaskell
-                    , UnicodeSyntax
-                    , OverloadedStrings
-  build-depends: base
-               , QuickCheck
-               , bytestring
+  build-depends: QuickCheck
                , filepath
-               , resourcet              >= 1.0
-               , streaming              >= 0.1
-               , streaming-bytestring   >= 0.1
                , tasty                  >= 0.11
                , tasty-hunit            >= 0.9
                , tasty-golden           >= 2.3
