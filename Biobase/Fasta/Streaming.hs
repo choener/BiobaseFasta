@@ -25,6 +25,8 @@ import qualified Streaming.Internal as SI
 import           Streaming as S
 import           Streaming.Prelude as SP
 
+import           Data.ByteString.Streaming.Split
+
 import           Biobase.Types.BioSequence
 import           Biobase.Types.Index.Type
 import           Biobase.Types.Strand
@@ -156,6 +158,93 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
     , _bswStrand = PlusStrand
     , _bswIndex = Index $ entries * cSz
     }
+
+streamedFasta ∷ (Monad m) ⇒ ByteString m r → Stream (Stream (ByteString m) m) m r
+{-# Inlinable streamedFasta #-}
+streamedFasta = S.maps (collapseData) . streamOfStreamedFasta
+
+-- | Here each individual fasta file will be a stream.
+--
+-- TODO Once this works, @streamingFasta@ should be @S.concats . streamOfStreamedFasta@ ...
+
+streamOfStreamedFasta
+  ∷ forall m r
+  . ( Monad m )
+  ⇒ ByteString m r
+  → Stream (Stream (ByteString m) m) m r
+  -- ^ 
+{-# Inlinable streamOfStreamedFasta #-}
+streamOfStreamedFasta = go . S8.lines where
+  go = \case
+    SI.Return r → SI.Return r
+    SI.Effect m → SI.Effect (fmap go m)
+    SI.Step fs → SI.Step (SI.Step (fmap (fmap go . oneFasta) fs))
+
+oneFasta ∷ (Monad m) ⇒ Stream (ByteString m) m r → Stream (ByteString m) m (Stream (ByteString m) m r)
+{-# Inlinable oneFasta #-}
+oneFasta = loop False where
+  loop hdr = \case
+    SI.Return r → SI.Return (SI.Return r)
+    SI.Effect m → SI.Effect (fmap (loop hdr) m)
+    SI.Step bs  → case bs of
+      Empty r → loop hdr r
+      Chunk cs xs
+        | BS.null cs → loop hdr $ SI.Step xs
+        | h=='>' || h==';' → if hdr then SI.Return (SI.Step bs) else SI.Step $ fmap (loop True) bs
+        | otherwise → SI.Step $ fmap (loop True) bs
+        where h = BS.head cs
+      Go m    → SI.Effect $ fmap ((loop hdr) . SI.Step) m
+
+-- | Given a stream, roughly like @[BS "Header", BS "Data1", BS "Data2", ...]@
+-- create a stream like @[BS "Header", BS "Data"]@. This means that the
+-- resulting stream holds exactly two @ByteString@'s.
+
+collapseData ∷ (Monad m) ⇒ Stream (ByteString m) m r → Stream (ByteString m) m r
+{-# Inlinable collapseData #-}
+collapseData = loop where
+  loop = \case
+    SI.Return r → SI.Return r
+    SI.Effect m → SI.Effect (fmap loop m)
+    SI.Step bs → case bs of
+      Empty r → loop r
+      Chunk cs xs
+        | BS.null cs → loop $ SI.Step xs
+        | h=='>' || h==';' → SI.Step $ fmap (S.yields . S8.concat) bs
+        | otherwise → SI.Step $ fmap loop bs
+        where h = BS.head cs
+      Go m    → SI.Effect $ fmap (loop . SI.Step) m
+
+-- | "Rechunk" a stream of bytestrings.
+
+reChunkBS ∷ (Monad m) ⇒ Int → Stream (ByteString m) m r → Stream (ByteString m) m r
+{-# Inlinable reChunkBS #-}
+reChunkBS n = splitsByteStringAt n . S8.concat
+
+-- | Assuming a "rechunked" stream of bytestrings, create sequence windows.
+
+chunksToWindows ∷ (Monad m, KnownNat k) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty k)) m r
+{-# Inlinable chunksToWindows #-}
+chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 0) (\(bs,i,_) → (bs,i)) . S.mapsM S8.toStrict where
+  indexed (_,cur,next) bs = (bs,next,next + BS.length bs)
+  go (bs,i)
+    = BioSequenceWindow
+        { _bswIdentifier = seqId
+        , _bswPrefix     = BioSequence ""
+        , _bswSequence   = BioSequence bs
+        , _bswSuffix     = BioSequence ""
+        , _bswStrand     = s
+        , _bswIndex      = Index i
+        }
+
+{-
+  =
+  . SP.drop 1                           -- drop the empfy case @(empty,empty)@
+  . SP.scan pfx (BS.empty,BS.empty) id  -- collect prefixes
+  . S.mapsM S8.toStrict                 -- strictify each chunk
+  where pfx (\(_,old) cur → (old,cur)
+-}
+
+foo = S8.fromStrict ">a\na\na\n>b\nb\nb\n"
 
 -- | Control structure for 'streamingFasta'.
 

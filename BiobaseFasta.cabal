@@ -44,6 +44,7 @@ common deps
                , string-conversions   >= 0.4
                --
                , BiobaseTypes         == 0.2.0.*
+               , DPutils              == 0.1.0.*
   default-language:
     Haskell2010
   default-extensions: BangPatterns
