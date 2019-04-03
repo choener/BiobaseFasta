@@ -3,6 +3,22 @@
 --
 -- The functions in here should be streaming in constant memory.
 --
+-- A typical, slightly complicated is this:
+-- @
+--  forEach ∷ forall r . Stream (ByteString m) m r → m (Stream (Of ()) m r)
+--  forEach dna = do
+--    -- extract the header, but at most 123 characters, dropping the rest
+--    hdr SP.:> dta ← extractHeader (Just 123) dna
+--    -- create windows @ws@ of a particular type. Include the prefix, the suffix, and make each window 10 characters long
+--    let ws = (streamedWindows True True (Just 10) (SequenceIdentifier hdr) PlusStrand dta :: SP.Stream (SP.Of (BioSequenceWindow "DNA" DNA 0)) m r)
+--    -- count the number of characters in @dna@, get the return value, print each window
+--    count SP.:> r ← SP.mapM_ (liftIO . print) . bswSeqLength $ SP.copy ws
+--    liftIO $ print count
+--    liftIO $ putStrLn ""
+--    -- yield one vacuous @()@ result, return the remainder @r@ from dna.
+--    return $ SP.yield () *> return r
+-- @
+--
 -- TODO Check if this is actually true with some unit tests.
 
 module Biobase.Fasta.Streaming
@@ -17,7 +33,7 @@ import           Data.ByteString.Streaming.Char8 as S8
 import           Data.ByteString.Streaming.Internal (ByteString(..))
 import           Data.Semigroup as SG
 import           Debug.Trace
-import           GHC.Generics
+import           GHC.Generics (Generic)
 import           GHC.TypeLits
 import           Prelude as P
 import qualified Data.ByteString.Char8 as BS
@@ -29,6 +45,7 @@ import           Data.ByteString.Streaming.Split
 
 import           Biobase.Types.BioSequence
 import           Biobase.Types.Index.Type
+import           Biobase.Types.Location
 import           Biobase.Types.Strand
 
 
@@ -75,7 +92,7 @@ streamingFasta
   -- ^ The size of each window to be processed.
   → ByteString m r
   -- ^ A streaming bytestring of Fasta files.
-  → Stream (Of (BioSequenceWindow w ty k)) m r
+  → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
   -- ^ The outgoing stream of @Current@ windows being processed.
 {-# Inlinable streamingFasta #-}
 streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHeader [] 0) where
@@ -155,9 +172,12 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
     , _bswPrefix = BioSequence pfx
     , _bswSequence = BioSequence seq
     , _bswSuffix = BioSequence BS.empty
-    , _bswStrand = PlusStrand
-    , _bswIndex = Index $ entries * cSz
+    , _bswLocation = PartialLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
+--    , _bswStrand = PlusStrand
+--    , _bswIndex = Index $ entries * cSz
     }
+
+-- |
 
 streamedFasta ∷ (Monad m) ⇒ ByteString m r → Stream (Stream (ByteString m) m) m r
 {-# Inlinable streamedFasta #-}
@@ -178,11 +198,14 @@ streamOfStreamedFasta = go . S8.lines where
   go = \case
     SI.Return r → SI.Return r
     SI.Effect m → SI.Effect (fmap go m)
-    SI.Step fs → SI.Step (SI.Step (fmap (fmap go . oneFasta) fs))
+    SI.Step fs → SI.Step (SI.Step (fmap (fmap go . splitFasta) fs))
 
-oneFasta ∷ (Monad m) ⇒ Stream (ByteString m) m r → Stream (ByteString m) m (Stream (ByteString m) m r)
-{-# Inlinable oneFasta #-}
-oneFasta = loop False where
+-- | Given a 'Stream (ByteString m) m r' which is a 'Stream' of @lines@, split
+-- off the first @Fasta@ entry.
+
+splitFasta ∷ (Monad m) ⇒ Stream (ByteString m) m r → Stream (ByteString m) m (Stream (ByteString m) m r)
+{-# Inlinable splitFasta #-}
+splitFasta = loop False where
   loop hdr = \case
     SI.Return r → SI.Return (SI.Return r)
     SI.Effect m → SI.Effect (fmap (loop hdr) m)
@@ -222,7 +245,7 @@ reChunkBS n = splitsByteStringAt n . S8.concat
 
 -- | Assuming a "rechunked" stream of bytestrings, create sequence windows.
 
-chunksToWindows ∷ (Monad m, KnownNat k) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty k)) m r
+chunksToWindows ∷ (Monad m) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
 {-# Inlinable chunksToWindows #-}
 chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 0) (\(bs,i,_) → (bs,i)) . S.mapsM S8.toStrict where
   indexed (_,cur,next) bs = (bs,next,next + BS.length bs)
@@ -232,17 +255,64 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
         , _bswPrefix     = BioSequence ""
         , _bswSequence   = BioSequence bs
         , _bswSuffix     = BioSequence ""
-        , _bswStrand     = s
-        , _bswIndex      = Index i
+        , _bswLocation   = PartialLocation s (Index i) (BS.length bs)
+--        , _bswStrand     = s
+--        , _bswIndex      = Index i
         }
 
-{-
-  =
-  . SP.drop 1                           -- drop the empfy case @(empty,empty)@
-  . SP.scan pfx (BS.empty,BS.empty) id  -- collect prefixes
-  . S.mapsM S8.toStrict                 -- strictify each chunk
-  where pfx (\(_,old) cur → (old,cur)
--}
+-- | Make it possible to take a fasta stream and produce a stream of
+-- 'BioSequenceWindow's. This is a convenience function around
+-- 'withSuffix . withPrefix . chunksToWindows . reChunks'.
+--
+-- In case of a @Nothing@ window size, a single huge @Fasta@ entry is produced
+-- (and materialized!).
+--
+-- TODO In case of @Nothing@ window size, we use the 'collapseData' function
+-- which has one check too many, and will be slightly slower. However, the
+-- check should be once per @ByteString@.
+
+streamedWindows
+  ∷ (Monad m)
+  ⇒ Bool
+  → Bool
+  → Maybe Int
+    -- ^ desired size or a single huge @Fasta@ entry.
+  → SequenceIdentifier w
+  → Strand
+  → (Stream (ByteString m) m) r
+  → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
+{-# Inlinable streamedWindows #-}
+streamedWindows withPrefix withSuffix winSz seqId strnd
+  = (if withSuffix then attachSuffixes else id)
+  . (if withPrefix then attachPrefixes else id)
+  . chunksToWindows seqId strnd
+  . (case winSz of { Nothing → collapseData; Just sz → reChunkBS sz })
+
+-- | Get the full length of a stream of 'BioSequenceWindow's, counted in
+-- characters in each 'bswSequence'.
+--
+-- To use, start with @bswSeqLength $ SP.copy xs@. Then consume this stream
+-- normally. It still provides a 'Stream' of 'BioSequenceWindows's. However,
+-- the return type is now not just @r@, but it provides @Int SP.:> r@, where
+-- the @Int@ provides the total length of characters within this @Fasta@ entry.
+--
+-- This value may then be used to fully update negative strand information.
+
+bswSeqLength ∷ (Monad m) ⇒ Stream (Of (BioSequenceWindow w ty k)) m r → m (Of Int r)
+{-# Inlinable bswSeqLength #-}
+bswSeqLength = SP.fold (\x w → x + view (bswSequence._BioSequence.to BS.length) w) 0 id
+
+-- | As a first function, the header should be extracted from a @Fasta@ stream. Since headers may be malformed / malicious, we make it possible to
+
+extractHeader
+  ∷ (Monad m)
+  ⇒ Maybe Int
+  → Stream (ByteString m) m r
+  → m (Of BS.ByteString (Stream (ByteString m) m r))
+{-# Inlinable extractHeader #-}
+extractHeader hdrSz =
+  let go = case hdrSz of { Nothing → id; Just sz → S8.drained . S8.splitAt (fromIntegral sz) }
+  in S8.toStrict . go . S8.concat . S.splitsAt 1
 
 foo = S8.fromStrict ">a\na\na\n>b\nb\nb\n"
 

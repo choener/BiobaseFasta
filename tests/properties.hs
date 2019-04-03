@@ -23,6 +23,7 @@ import           Test.Tasty.QuickCheck as QC
 import           Test.Tasty.TH
 
 import           Biobase.Types.BioSequence
+import           Biobase.Types.Location
 import           Biobase.Types.Strand
 
 import           Biobase.Fasta.Streaming
@@ -76,7 +77,7 @@ smallInlineFasta = P.unlines
   , "890"
   ]
 
-smallTest ∷ Int → Int → Int → Of [BioSequenceWindow Void Void 1] ()
+smallTest ∷ Int → Int → Int → Of [BioSequenceWindow Void Void PartialLocation] ()
 smallTest h o c = runIdentity
          . toList
 --         . SP.map (view windowedFasta)
@@ -89,10 +90,10 @@ smallTest333 = testCase "3/3/3" $ do
   let res :> r = smallTest 3 3 3
   assertEqual "return is null" () r
   assertEqual "length is 4" 4 (P.length res)
-  assertEqual "!!0" (BioSequenceWindow "Aaa" ""    "123" "" PlusStrand 1) (res!!0)
-  assertEqual "!!1" (BioSequenceWindow "Bbb" ""    "456" "" PlusStrand 1) (res!!1)
-  assertEqual "!!2" (BioSequenceWindow "Bbb" "456" "7"   "" PlusStrand 4) (res!!2)
-  assertEqual "!!3" (BioSequenceWindow "Ccc" ""    "890" "" PlusStrand 1) (res!!3)
+  assertEqual "!!0" (BioSequenceWindow "Aaa" ""    "123" "" (PartialLocation PlusStrand 0 3)) (res!!0)
+  assertEqual "!!1" (BioSequenceWindow "Bbb" ""    "456" "" (PartialLocation PlusStrand 0 3)) (res!!1)
+  assertEqual "!!2" (BioSequenceWindow "Bbb" "456" "7"   "" (PartialLocation PlusStrand 3 1)) (res!!2)
+  assertEqual "!!3" (BioSequenceWindow "Ccc" ""    "890" "" (PartialLocation PlusStrand 0 3)) (res!!3)
   --
   assertEqual "!!0/Fasta" (Fasta "Aaa" "123") (view windowedFasta $ res!!0)
   assertEqual "!!1/Fasta" (Fasta "Bbb" "456") (view windowedFasta $ res!!1)
