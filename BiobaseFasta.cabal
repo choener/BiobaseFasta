@@ -1,6 +1,6 @@
 cabal-version:  2.2
 name:           BiobaseFasta
-version:        0.3.0.0
+version:        0.3.0.1
 author:         Christian Hoener zu Siederdissen
 maintainer:     choener@bioinf.uni-leipzig.de
 homepage:       https://github.com/choener/BiobaseFasta
