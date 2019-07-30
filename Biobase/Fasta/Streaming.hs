@@ -92,7 +92,7 @@ streamingFasta
   -- ^ The size of each window to be processed.
   → ByteString m r
   -- ^ A streaming bytestring of Fasta files.
-  → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
+  → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
   -- ^ The outgoing stream of @Current@ windows being processed.
 {-# Inlinable streamingFasta #-}
 streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHeader [] 0) where
@@ -172,7 +172,7 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
     , _bswPrefix = BioSequence pfx
     , _bswSequence = BioSequence seq
     , _bswSuffix = BioSequence BS.empty
-    , _bswLocation = PartialLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
+    , _bswLocation = FwdLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
 --    , _bswStrand = PlusStrand
 --    , _bswIndex = Index $ entries * cSz
     }
@@ -245,7 +245,7 @@ reChunkBS n = splitsByteStringAt n . S8.concat
 
 -- | Assuming a "rechunked" stream of bytestrings, create sequence windows.
 
-chunksToWindows ∷ (Monad m) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
+chunksToWindows ∷ (Monad m) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
 {-# Inlinable chunksToWindows #-}
 chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 0) (\(bs,i,_) → (bs,i)) . S.mapsM S8.toStrict where
   indexed (_,cur,next) bs = (bs,next,next + BS.length bs)
@@ -255,7 +255,7 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
         , _bswPrefix     = BioSequence ""
         , _bswSequence   = BioSequence bs
         , _bswSuffix     = BioSequence ""
-        , _bswLocation   = PartialLocation s (Index i) (BS.length bs)
+        , _bswLocation   = FwdLocation s (Index i) (BS.length bs)
 --        , _bswStrand     = s
 --        , _bswIndex      = Index i
         }
@@ -280,7 +280,7 @@ streamedWindows
   → SequenceIdentifier w
   → Strand
   → (Stream (ByteString m) m) r
-  → Stream (Of (BioSequenceWindow w ty PartialLocation)) m r
+  → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
 {-# Inlinable streamedWindows #-}
 streamedWindows withPrefix withSuffix winSz seqId strnd
   = (if withSuffix then attachSuffixes else id)
