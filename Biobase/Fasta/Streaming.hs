@@ -169,12 +169,10 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
   -- build up a seq-window
   seqWindow hdr pfx seq entries = BioSequenceWindow
     { _bswIdentifier = SequenceIdentifier hdr
-    , _bswPrefix = BioSequence pfx
-    , _bswSequence = BioSequence seq
-    , _bswSuffix = BioSequence BS.empty
-    , _bswLocation = FwdLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
---    , _bswStrand = PlusStrand
---    , _bswIndex = Index $ entries * cSz
+    , _bswPrefixLen  = BS.length pfx
+    , _bswSequence   = BioSequence $ pfx <> seq
+    , _bswSuffixLen  = 0
+    , _bswLocation   = FwdLocation PlusStrand (Index $ entries * cSz - BS.length pfx) (BS.length pfx + BS.length seq)
     }
 
 -- |
@@ -252,12 +250,10 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
   go (bs,i)
     = BioSequenceWindow
         { _bswIdentifier = seqId
-        , _bswPrefix     = BioSequence ""
+        , _bswPrefixLen  = 0
         , _bswSequence   = BioSequence bs
-        , _bswSuffix     = BioSequence ""
+        , _bswSuffixLen  = 0
         , _bswLocation   = FwdLocation s (Index i) (BS.length bs)
---        , _bswStrand     = s
---        , _bswIndex      = Index i
         }
 
 -- | Make it possible to take a fasta stream and produce a stream of
@@ -283,7 +279,7 @@ streamedWindows
   → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
 {-# Inlinable streamedWindows #-}
 streamedWindows withPrefix withSuffix winSz seqId strnd
-  = (if withSuffix then attachSuffixes else id)
+  = (if withSuffix then error "attachSuffixe in BiobaseTypes needs to be implemented" else id)
   . (if withPrefix then attachPrefixes else id)
   . chunksToWindows seqId strnd
   . (case winSz of { Nothing → collapseData; Just sz → reChunkBS sz })
