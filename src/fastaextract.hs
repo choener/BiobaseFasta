@@ -45,7 +45,7 @@ extract ifx' f' t' s = BSS.mwrap $ do
   -- we actually have a stream to return
   then return $ do
     BSS.fromStrict $ hdr `BS.snoc` '\n'
-    BSS.drained . BSS.splitAt (t-f+1) . BSS.drop (f-1) $ BSS.concat dta
+    (BSS.drained . BSS.splitAt (t-f+1) . BSS.drop (f-1) $ BSS.concat dta) `BSS.snoc` '\n'
   -- just drain this stream
   else mapsM_ BSS.effects dta >>= return . return
 
@@ -53,5 +53,5 @@ main ∷ IO ()
 main = do
   p ← execParser (info options fullDesc)
   case p of
-    Extract hdr f t → BSS.stdout . BSS.unlines . maps (extract hdr f t) . FS.streamedFasta $ BSS.stdin
+    Extract hdr f t → BSS.stdout . BSS.concat . maps (extract hdr f t) . FS.streamedFasta $ BSS.stdin
 
