@@ -3,7 +3,7 @@ module Main where
 
 import Control.Monad.IO.Class
 import Data.ByteString.Char8 as BS
-import Data.ByteString.Streaming as BSS
+import Data.ByteString.Streaming.Char8 as BSS
 import Options.Applicative
 import Streaming as S
 import Streaming.Prelude as SP
@@ -44,13 +44,14 @@ extract ifx' f' t' s = BSS.mwrap $ do
   if ifx `BS.isInfixOf` hdr
   -- we actually have a stream to return
   then return $ do
-    BSS.fromStrict hdr
-    BSS.drained . BSS.splitAt (t-f-1) . BSS.drop (f-1) $ BSS.concat dta
+    BSS.fromStrict $ hdr `BS.snoc` '\n'
+    BSS.drained . BSS.splitAt (t-f+1) . BSS.drop (f-1) $ BSS.concat dta
   -- just drain this stream
   else mapsM_ BSS.effects dta >>= return . return
 
 main ∷ IO ()
 main = do
-  case undefined of
-    Extract hdr f t → BSS.stdout . BSS.concat . maps (extract hdr f t) . FS.streamedFasta $ BSS.stdin
+  p ← execParser (info options fullDesc)
+  case p of
+    Extract hdr f t → BSS.stdout . BSS.unlines . maps (extract hdr f t) . FS.streamedFasta $ BSS.stdin
 
