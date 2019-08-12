@@ -82,6 +82,23 @@ library
 
 
 
+-- | A simple tool for fasta files, showing some features
+
+executable fastaextract
+  import: deps
+  build-depends: base
+               , optparse-applicative >= 0.14
+               --
+               , BiobaseFasta
+  hs-source-dirs:
+    src
+  main-is:
+    fastaextract.hs
+  ghc-options:
+    -rtsopts
+
+
+
 test-suite properties
   import:
     deps
