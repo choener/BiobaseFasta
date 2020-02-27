@@ -169,10 +169,10 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
   -- build up a seq-window
   seqWindow hdr pfx seq entries = BioSequenceWindow
     { _bswIdentifier = SequenceIdentifier hdr
-    , _bswPrefixLen  = BS.length pfx
-    , _bswSequence   = BioSequence $ pfx <> seq
-    , _bswSuffixLen  = 0
-    , _bswLocation   = FwdLocation PlusStrand (Index $ entries * cSz - BS.length pfx) (BS.length pfx + BS.length seq)
+    , _bswPrefix = BioSequence pfx
+    , _bswInfix  = BioSequence seq
+    , _bswSuffix = BioSequence ""
+    , _bswInfixLocation = FwdLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
     }
 
 -- |
@@ -250,10 +250,10 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
   go (bs,i)
     = BioSequenceWindow
         { _bswIdentifier = seqId
-        , _bswPrefixLen  = 0
-        , _bswSequence   = BioSequence bs
-        , _bswSuffixLen  = 0
-        , _bswLocation   = FwdLocation s (Index i) (BS.length bs)
+        , _bswPrefix  = BioSequence ""
+        , _bswInfix   = BioSequence bs
+        , _bswSuffix  = BioSequence ""
+        , _bswInfixLocation = FwdLocation s (Index i) (BS.length bs)
         }
 
 -- | Make it possible to take a fasta stream and produce a stream of
@@ -269,8 +269,8 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
 
 streamedWindows
   ∷ (Monad m)
-  ⇒ Bool
-  → Bool
+  ⇒ Maybe Int
+  → Maybe Int
   → Maybe Int
     -- ^ desired size or a single huge @Fasta@ entry.
   → SequenceIdentifier w
@@ -279,8 +279,8 @@ streamedWindows
   → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
 {-# Inlinable streamedWindows #-}
 streamedWindows withPrefix withSuffix winSz seqId strnd
-  = (if withSuffix then error "attachSuffixe in BiobaseTypes needs to be implemented" else id)
-  . (if withPrefix then attachPrefixes else id)
+  = (maybe id attachSuffixes withSuffix)
+  . (maybe id attachPrefixes withPrefix)
   . chunksToWindows seqId strnd
   . (case winSz of { Nothing → collapseData; Just sz → reChunkBS sz })
 
