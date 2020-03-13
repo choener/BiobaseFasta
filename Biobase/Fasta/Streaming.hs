@@ -46,9 +46,10 @@ import           Data.ByteString.Streaming.Split
 import           Biobase.Types.BioSequence
 import           Biobase.Types.Index.Type
 import           Biobase.Types.Location
+import           Biobase.Types.Position
 import           Biobase.Types.Strand
 
-
+{-
 
 newtype HeaderSize = HeaderSize Int
   deriving (Eq,Ord,Show)
@@ -175,11 +176,13 @@ streamingFasta (HeaderSize hSz) (OverlapSize oSz) (CurrentSize cSz) = go (FindHe
     , _bswInfixLocation = FwdLocation PlusStrand (Index $ entries * cSz) (BS.length seq)
     }
 
+-}
+
 -- |
 
 streamedFasta ∷ (Monad m) ⇒ ByteString m r → Stream (Stream (ByteString m) m) m r
 {-# Inlinable streamedFasta #-}
-streamedFasta = S.maps (collapseData) . streamOfStreamedFasta
+streamedFasta = S.maps collapseData . streamOfStreamedFasta
 
 -- | Here each individual fasta file will be a stream.
 --
@@ -235,9 +238,10 @@ collapseData = loop where
         where h = BS.head cs
       Go m    → SI.Effect $ fmap (loop . SI.Step) m
 
+
 -- | "Rechunk" a stream of bytestrings.
 
-reChunkBS ∷ (Monad m) ⇒ Int → Stream (ByteString m) m r → Stream (ByteString m) m r
+reChunkBS :: (Monad m) => Int -> Stream (ByteString m) m r -> Stream (ByteString m) m r
 {-# Inlinable reChunkBS #-}
 reChunkBS n = splitsByteStringAt n . S8.concat
 
@@ -255,6 +259,8 @@ chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 
         , _bswSuffix  = BioSequence ""
         , _bswInfixLocation = FwdLocation s (Index i) (BS.length bs)
         }
+
+
 
 -- | Make it possible to take a fasta stream and produce a stream of
 -- 'BioSequenceWindow's. This is a convenience function around
@@ -276,7 +282,8 @@ streamedWindows
   → SequenceIdentifier w
   → Strand
   → (Stream (ByteString m) m) r
-  → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
+--  → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
+  -> Stream (Of (Location w FwdPosition (BioSequence ty))) m r
 {-# Inlinable streamedWindows #-}
 streamedWindows withPrefix withSuffix winSz seqId strnd
   = (maybe id attachSuffixes withSuffix)
@@ -294,21 +301,24 @@ streamedWindows withPrefix withSuffix winSz seqId strnd
 --
 -- This value may then be used to fully update negative strand information.
 
-bswSeqLength ∷ (Monad m) ⇒ Stream (Of (BioSequenceWindow w ty k)) m r → m (Of Int r)
-{-# Inlinable bswSeqLength #-}
-bswSeqLength = SP.fold (\x w → x + view (bswSequence._BioSequence.to BS.length) w) 0 id
+streamLocationLength :: (Monad m, ModifyLocation posTy seqTy) => Stream (Of (Location i posTy seqTy)) m r -> m (Of Int r)
+{-# Inlinable streamLocationLength #-}
+streamLocationLength = SP.fold (\x w → x + locLength w) 0 id
 
--- | As a first function, the header should be extracted from a @Fasta@ stream. Since headers may be malformed / malicious, we make it possible to
+-- | As a first function, the header should be extracted from a @Fasta@ stream. Since headers may be
+-- malformed / malicious, we make it possible to
 
 extractHeader
-  ∷ (Monad m)
-  ⇒ Maybe Int
-  → Stream (ByteString m) m r
-  → m (Of BS.ByteString (Stream (ByteString m) m r))
+  :: (Monad m)
+  => Maybe Int
+  -> Stream (ByteString m) m r
+  -> m (Of BS.ByteString (Stream (ByteString m) m r))
 {-# Inlinable extractHeader #-}
 extractHeader hdrSz =
-  let go = case hdrSz of { Nothing → id; Just sz → S8.drained . S8.splitAt (fromIntegral sz) }
+  let go = case hdrSz of { Nothing -> id; Just sz -> S8.drained . S8.splitAt (fromIntegral sz) }
   in S8.toStrict . go . S8.concat . S.splitsAt 1
+
+{-
 
 foo = S8.fromStrict ">a\na\na\n>b\nb\nb\n"
 
@@ -333,6 +343,8 @@ data FindHeader
       , entries ∷ !Int
       -- ^ count how many entries we have seen
       }
+
+-}
 
 {-
 t0 = P.unlines
