@@ -247,17 +247,15 @@ reChunkBS n = splitsByteStringAt n . S8.concat
 
 -- | Assuming a "rechunked" stream of bytestrings, create sequence windows.
 
-chunksToWindows ∷ (Monad m) ⇒ SequenceIdentifier w → Strand → Stream (ByteString m) m r → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
+chunksToWindows :: Monad m => SequenceIdentifier w -> Strand -> Stream (ByteString m) m r -> Stream (Of (Location w FwdPosition (BioSequence ty))) m r
 {-# Inlinable chunksToWindows #-}
 chunksToWindows seqId s = SP.map go . SP.drop 1 . SP.scan indexed (BS.empty, 0, 0) (\(bs,i,_) → (bs,i)) . S.mapsM S8.toStrict where
   indexed (_,cur,next) bs = (bs,next,next + BS.length bs)
   go (bs,i)
-    = BioSequenceWindow
-        { _bswIdentifier = seqId
-        , _bswPrefix  = BioSequence ""
-        , _bswInfix   = BioSequence bs
-        , _bswSuffix  = BioSequence ""
-        , _bswInfixLocation = FwdLocation s (Index i) (BS.length bs)
+    = Location
+        { _locIdentifier = seqId
+        , _locPosition   = FwdPosition s (Index i)
+        , _locSequence   = BioSequence bs
         }
 
 
@@ -283,11 +281,12 @@ streamedWindows
   → Strand
   → (Stream (ByteString m) m) r
 --  → Stream (Of (BioSequenceWindow w ty FwdLocation)) m r
-  -> Stream (Of (Location w FwdPosition (BioSequence ty))) m r
+  -> Stream (Of (PIS w FwdPosition (BioSequence ty))) m r
 {-# Inlinable streamedWindows #-}
 streamedWindows withPrefix withSuffix winSz seqId strnd
   = (maybe id attachSuffixes withSuffix)
   . (maybe id attachPrefixes withPrefix)
+  . SP.map pis
   . chunksToWindows seqId strnd
   . (case winSz of { Nothing → collapseData; Just sz → reChunkBS sz })
 
