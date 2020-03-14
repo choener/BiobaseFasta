@@ -79,19 +79,23 @@ byteStringToFasta (BS.lines → ls)
 -- | Try to parse a 'ByteString' as multiple 'Fasta' entries. Even though this
 -- is using the underlying streaming interface, this is not streaming.
 
+{-
 byteStringToMultiFasta
   ∷ BSL.ByteString → [Fasta which ty]
 {-# Inlinable byteStringToMultiFasta #-}
 byteStringToMultiFasta bsl = map (view windowedFasta) $ runIdentity bss
   where bss = SP.toList_ . streamingFasta (HeaderSize maxBound) (OverlapSize 0) (CurrentSize maxBound) $ BSS.fromLazy bsl
+-}
 
 -- | A lens that goes from a 'BioSequenceWindow' to a 'Fasta'.
 
+{-
 windowedFasta ∷ Lens' (BioSequenceWindow w ty k) (Fasta w ty)
 {-# Inline windowedFasta #-}
 windowedFasta = lens lr rl
   where lr bsw = Fasta { _header = bsw^.bswIdentifier, _fasta = bsw^.bswSequence }
         rl bsw f = set bswSequence (f^.fasta) $ set bswIdentifier (f^.header) bsw
+-}
 
 -- | A prism from a 'ByteString' to a 'Fasta'. Note that this will only be an
 -- identity if the underlying fasta file is rendered with @k@ characters per
