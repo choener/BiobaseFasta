@@ -5,13 +5,13 @@ author:         Christian Hoener zu Siederdissen
 maintainer:     choener@bioinf.uni-leipzig.de
 homepage:       https://github.com/choener/BiobaseFasta
 bug-reports:    https://github.com/choener/BiobaseFasta/issues
-copyright:      Christian Hoener zu Siederdissen, 2011-2019
+copyright:      Christian Hoener zu Siederdissen, 2011-2020
 category:       Bioinformatics
 license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 stability:      experimental
-tested-with:    GHC == 8.4.4
+tested-with:    GHC == 8.6.5
 synopsis:       streaming FASTA parser
 description:
                 Stream-based handling of FASTA files. The user selects a window
