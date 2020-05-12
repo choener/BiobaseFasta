@@ -87,15 +87,40 @@ install:
   - echo 'package BiobaseFasta' >> cabal.project
   - "echo '  ghc-options: -Werror=missing-methods' >> cabal.project"
   - |
-    echo "source-repository-package"                           >> cabal.project
-    echo "  type:     git"                                     >> cabal.project
-    echo "  location: https://github.com/choener/DPutils"      >> cabal.project
-    echo "  tag:      master"                                  >> cabal.project
-    echo ""                                                    >> cabal.project
-    echo "source-repository-package"                           >> cabal.project
-    echo "  type:     git"                                     >> cabal.project
-    echo "  location: https://github.com/choener/BiobaseTypes" >> cabal.project
-    echo "  tag:      master"                                  >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/DPutils"          >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/BiobaseTypes"     >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/bimaps"           >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/DPutils"          >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/PrimitiveArray"   >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/ForestStructures" >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/SciBaseTypes"     >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
   - "for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/-[^-]*$//' | (grep -vE -- '^(BiobaseFasta)$' || true) | sed 's/^/constraints: /' | sed 's/$/ installed/' >> cabal.project.local; done"
   - cat cabal.project || true
   - cat cabal.project.local || true
@@ -123,15 +148,40 @@ script:
   - echo 'package BiobaseFasta' >> cabal.project
   - "echo '  ghc-options: -Werror=missing-methods' >> cabal.project"
   - |
-    echo "source-repository-package"                           >> cabal.project
-    echo "  type:     git"                                     >> cabal.project
-    echo "  location: https://github.com/choener/DPutils"      >> cabal.project
-    echo "  tag:      master"                                  >> cabal.project
-    echo ""                                                    >> cabal.project
-    echo "source-repository-package"                           >> cabal.project
-    echo "  type:     git"                                     >> cabal.project
-    echo "  location: https://github.com/choener/BiobaseTypes" >> cabal.project
-    echo "  tag:      master"                                  >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/DPutils"          >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/BiobaseTypes"     >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/bimaps"           >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/DPutils"          >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/PrimitiveArray"   >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/ForestStructures" >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
+    echo ""                                                        >> cabal.project
+    echo "source-repository-package"                               >> cabal.project
+    echo "  type:     git"                                         >> cabal.project
+    echo "  location: https://github.com/choener/SciBaseTypes"     >> cabal.project
+    echo "  tag:      master"                                      >> cabal.project
   - "for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/-[^-]*$//' | (grep -vE -- '^(BiobaseFasta)$' || true) | sed 's/^/constraints: /' | sed 's/$/ installed/' >> cabal.project.local; done"
   - cat cabal.project || true
   - cat cabal.project.local || true
