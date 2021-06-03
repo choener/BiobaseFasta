@@ -77,34 +77,35 @@ smallInlineFasta = P.unlines
   , "890"
   ]
 
-smallTest ∷ Int → Int → Int → Of [BioSequenceWindow Void Void PartialLocation] ()
-smallTest h o c = runIdentity
-         . toList
---         . SP.map (view windowedFasta)
-         . streamingFasta (HeaderSize h) (OverlapSize o) (CurrentSize c)
-         . S8.fromStrict
-         $ BS.pack smallInlineFasta
-  where go (HeaderSize h) (OverlapSize o) (CurrentSize c) = yield (h,o,c)
-
-smallTest333 = testCase "3/3/3" $ do
-  let res :> r = smallTest 3 3 3
-  assertEqual "return is null" () r
-  assertEqual "length is 4" 4 (P.length res)
-  assertEqual "!!0" (BioSequenceWindow "Aaa" ""    "123" "" (PartialLocation PlusStrand 0 3)) (res!!0)
-  assertEqual "!!1" (BioSequenceWindow "Bbb" ""    "456" "" (PartialLocation PlusStrand 0 3)) (res!!1)
-  assertEqual "!!2" (BioSequenceWindow "Bbb" "456" "7"   "" (PartialLocation PlusStrand 3 1)) (res!!2)
-  assertEqual "!!3" (BioSequenceWindow "Ccc" ""    "890" "" (PartialLocation PlusStrand 0 3)) (res!!3)
-  --
-  assertEqual "!!0/Fasta" (Fasta "Aaa" "123") (view windowedFasta $ res!!0)
-  assertEqual "!!1/Fasta" (Fasta "Bbb" "456") (view windowedFasta $ res!!1)
-  assertEqual "!!2/Fasta" (Fasta "Bbb" "7"  ) (view windowedFasta $ res!!2)
-  assertEqual "!!3/Fasta" (Fasta "Ccc" "890") (view windowedFasta $ res!!3)
+--smallTest ∷ Int → Int → Int → Of [BioSequenceWindow Void Void PartialLocation] ()
+--smallTest h o c = runIdentity
+--         . toList
+----         . SP.map (view windowedFasta)
+--         . streamingFasta (HeaderSize h) (OverlapSize o) (CurrentSize c)
+--         . S8.fromStrict
+--         $ BS.pack smallInlineFasta
+--  where go (HeaderSize h) (OverlapSize o) (CurrentSize c) = yield (h,o,c)
+--
+--smallTest333 = testCase "3/3/3" $ do
+--  let res :> r = smallTest 3 3 3
+--  assertEqual "return is null" () r
+--  assertEqual "length is 4" 4 (P.length res)
+--  assertEqual "!!0" (BioSequenceWindow "Aaa" ""    "123" "" (PartialLocation PlusStrand 0 3)) (res!!0)
+--  assertEqual "!!1" (BioSequenceWindow "Bbb" ""    "456" "" (PartialLocation PlusStrand 0 3)) (res!!1)
+--  assertEqual "!!2" (BioSequenceWindow "Bbb" "456" "7"   "" (PartialLocation PlusStrand 3 1)) (res!!2)
+--  assertEqual "!!3" (BioSequenceWindow "Ccc" ""    "890" "" (PartialLocation PlusStrand 0 3)) (res!!3)
+--  --
+--  assertEqual "!!0/Fasta" (Fasta "Aaa" "123") (view windowedFasta $ res!!0)
+--  assertEqual "!!1/Fasta" (Fasta "Bbb" "456") (view windowedFasta $ res!!1)
+--  assertEqual "!!2/Fasta" (Fasta "Bbb" "7"  ) (view windowedFasta $ res!!2)
+--  assertEqual "!!3/Fasta" (Fasta "Ccc" "890") (view windowedFasta $ res!!3)
 
 main :: IO ()
 main = do
 --   gs ← goldenTests
    defaultMain $ testGroup "all tests"
 --     [ testGroup "Golden" [gs]
-     [ testGroup "unit tests" [smallTest333]
+--     [ testGroup "unit tests" [smallTest333]
+     [
      ]
 

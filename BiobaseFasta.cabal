@@ -11,7 +11,7 @@ license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 stability:      experimental
-tested-with:    GHC == 8.6.5
+tested-with:    GHC == 8.8.4, GHC == 8.10.4, GHC == 9.0
 synopsis:       streaming FASTA parser
 description:
                 Stream-based handling of FASTA files. The user selects a window
@@ -40,7 +40,7 @@ common deps
                , lens                 >= 4.0
                , resourcet            >= 1.0
                , streaming            >= 0.1
-               , streaming-bytestring >= 0.1
+               , streaming-bytestring >= 0.2
                , string-conversions   >= 0.4
                --
                , BiobaseTypes         == 0.2.0.*
