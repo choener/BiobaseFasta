@@ -1,5 +1,11 @@
-name: CI
-on: [push]
+# this action shall run whenever we prepare for a hackage release. It triggers on a push to the
+# hackage branch and will run cabal v2-test without using a cabal.project file.
+
+name: hackage
+on:
+  push:
+    branches:
+      - hackage
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -16,5 +22,7 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           cabal-version: ${{ matrix.cabal }}
-      - run: cabal v2-test
+      - run: |
+          rm cabal.project
+          cabal v2-test
 

@@ -1,4 +1,5 @@
-![github action: master](https://github.com/choener/BiobaseFasta/actions/workflows/action.yml/badge.svg)
+![github action: master](https://github.com/choener/BiobaseFasta/actions/workflows/ci.yml/badge.svg?branch=master)
+![github action: hackage](https://github.com/choener/BiobaseFasta/actions/workflows/hackage.yml/badge.svg)
 
 # BiobaseFasta
 
